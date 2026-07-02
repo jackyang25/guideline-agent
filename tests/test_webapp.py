@@ -80,15 +80,19 @@ def test_path_traversal_rejected(seeded):
     assert client().get("/api/guidelines/..%2f..%2fetc/manifest").status_code in (400, 404)
 
 
-def test_extract_endpoint_wires_to_pipeline(out_root, monkeypatch):
+def test_extract_endpoint_streams_progress_then_done(out_root, monkeypatch):
     captured = {}
 
-    def fake_extract(pdf_path, out_dir, guideline_id, **kw):
+    def fake_extract(pdf_path, out_dir, guideline_id, on_page=None, **kw):
         captured["guideline_id"] = guideline_id
-        captured["out_dir"] = out_dir
         captured["kw"] = kw
+        total = 2
+        if on_page:
+            on_page(0, total)
+            on_page(1, total)
+            on_page(2, total)
         m = Manifest(guideline_id, kw["guideline_title"], kw.get("jurisdiction"),
-                     None, kw.get("version"), None, "x.pdf", 2,
+                     None, kw.get("version"), None, "x.pdf", total,
                      [PageMapEntry(1, "t", 1), PageMapEntry(2, "u", 2)])
         return m, [1]
 
@@ -99,9 +103,26 @@ def test_extract_endpoint_wires_to_pipeline(out_root, monkeypatch):
         files={"file": ("doc.pdf", b"%PDF-1.4 fake", "application/pdf")},
     )
     assert resp.status_code == 200
-    assert resp.json() == {"guideline_id": "G1", "page_count": 2, "flags": [1]}
-    assert captured["guideline_id"] == "G1"
+    events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    progress = [e for e in events if e["type"] == "progress"]
+    assert progress[-1] == {"type": "progress", "done": 2, "total": 2}
+    assert events[-1] == {"type": "done", "guideline_id": "G1", "page_count": 2, "flags": [1]}
     assert captured["kw"]["limit"] == 2
+
+
+def test_extract_endpoint_streams_error(out_root, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("no api key")
+
+    monkeypatch.setattr(webapp, "extract", boom)
+    resp = client().post(
+        "/api/extract",
+        data={"guideline_id": "G1", "guideline_title": "Title"},
+        files={"file": ("doc.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    assert events[-1]["type"] == "error"
+    assert "no api key" in events[-1]["detail"]
 
 
 def test_index_page_served(out_root):

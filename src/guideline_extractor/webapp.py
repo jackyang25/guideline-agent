@@ -1,11 +1,13 @@
 import json
 import os
+import queue
 import tempfile
+import threading
 from pathlib import Path
 
 import markdown as md
 from fastapi import FastAPI, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
 from .pipeline import extract
 
@@ -83,30 +85,54 @@ def run_extract(
     version: str = Form(""),
     limit: int = Form(0),
     concurrency: int = Form(25),
-) -> JSONResponse:
+) -> StreamingResponse:
     root = output_root()
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(file.file.read())
         pdf_path = tmp.name
-    try:
-        manifest, flags = extract(
-            pdf_path,
-            str(root / guideline_id),
-            guideline_id,
-            guideline_title=guideline_title,
-            jurisdiction=jurisdiction or None,
-            version=version or None,
-            limit=limit or None,
-            concurrency=concurrency,
-        )
-    except Exception as exc:  # surface auth/model errors to the UI plainly
-        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
-    finally:
-        os.unlink(pdf_path)
-    return JSONResponse(
-        {"guideline_id": guideline_id, "page_count": manifest.page_count, "flags": flags}
-    )
+
+    events: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        try:
+            manifest, flags = extract(
+                pdf_path,
+                str(root / guideline_id),
+                guideline_id,
+                guideline_title=guideline_title,
+                jurisdiction=jurisdiction or None,
+                version=version or None,
+                limit=limit or None,
+                concurrency=concurrency,
+                on_page=lambda done, total: events.put(
+                    {"type": "progress", "done": done, "total": total}
+                ),
+            )
+            events.put(
+                {
+                    "type": "done",
+                    "guideline_id": guideline_id,
+                    "page_count": manifest.page_count,
+                    "flags": flags,
+                }
+            )
+        except Exception as exc:  # surface auth/model errors as a stream event
+            events.put({"type": "error", "detail": f"{type(exc).__name__}: {exc}"})
+        finally:
+            os.unlink(pdf_path)
+            events.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def stream():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -239,15 +265,31 @@ $('#upload').onsubmit = async e => {
   fd.append('guideline_id', $('#gid').value);
   fd.append('guideline_title', $('#gtitle').value);
   if ($('#limit').value) fd.append('limit', $('#limit').value);
-  $('#status').textContent = 'extracting...';
+  $('#status').textContent = 'starting...';
   const res = await fetch('/api/extract', {method:'POST', body:fd});
-  if (res.ok) {
-    const j = await res.json();
-    $('#status').textContent = 'done: '+j.page_count+' pages'+(j.flags.length?(' · QC flags '+JSON.stringify(j.flags)):'');
-    await loadGuidelines(j.guideline_id);
-  } else {
-    const j = await res.json().catch(()=>({detail:res.statusText}));
-    $('#status').textContent = 'error: '+(j.detail||res.status);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream:true});
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const m = JSON.parse(line);
+      if (m.type === 'progress') {
+        $('#status').textContent = 'processing ' + m.done + ' / ' + m.total;
+      } else if (m.type === 'done') {
+        $('#status').textContent = 'done: ' + m.page_count + ' pages'
+          + (m.flags.length ? (' · QC flags ' + JSON.stringify(m.flags)) : '');
+        await loadGuidelines(m.guideline_id);
+      } else if (m.type === 'error') {
+        $('#status').textContent = 'error: ' + m.detail;
+      }
+    }
   }
 };
 
