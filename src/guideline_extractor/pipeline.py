@@ -4,12 +4,7 @@ import anthropic
 
 from .describe import describe_page
 from .models import Manifest, PageMapEntry, PageRecord
-from .pagemap import (
-    assign_page_numbers,
-    calibrate_offset,
-    check_monotonic,
-    detect_printed_number,
-)
+from .pagemap import resolve_page_numbers
 from .render import render_pdf
 from .storage import save_image, write_manifest, write_page_record
 
@@ -30,36 +25,9 @@ def extract(
 ) -> tuple[Manifest, list[int]]:
     pages = rendered if rendered is not None else render_pdf(pdf_path)
 
-    # Detect printed page numbers once and reuse for calibration and QC.
-    printed = [detect_printed_number(p.raw_text) for p in pages]
-
-    # Calibrate printed page numbers against sheet indices.
-    samples = list(zip((p.pdf_index for p in pages), printed))
-    offset = calibrate_offset(samples)
-    page_numbers = assign_page_numbers([p.pdf_index for p in pages], offset)
-
-    # QC: flag sheets where the *printed* numbering itself breaks (not
-    # strictly increasing), independent of the calibrated offset. Pages
-    # with no detected printed number are skipped for this check, but
-    # flag indices refer back to their position in `pages`.
-    present = [(i, n) for i, n in enumerate(printed) if n is not None]
-    if present:
-        sub_flags = check_monotonic([n for _, n in present])
-        monotonic_flags = {present[i][0] for i in sub_flags}
-    else:
-        monotonic_flags = set()
-
-    # QC: flag any page whose detected printed number disagrees with its
-    # calibrated page_number - catches calibration disagreements (e.g. a
-    # section that restarts numbering, or a mis-detected offset) that the
-    # monotonic check alone can miss.
-    mismatch_flags = {
-        i
-        for i, n in enumerate(printed)
-        if n is not None and n != page_numbers[i]
-    }
-
-    flags = sorted(monotonic_flags | mismatch_flags)
+    page_numbers, flags = resolve_page_numbers(
+        [p.raw_text for p in pages], [p.pdf_index for p in pages]
+    )
 
     if client is None and describe_fn is describe_page:
         client = anthropic.Anthropic()
