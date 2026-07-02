@@ -3,6 +3,7 @@ from guideline_extractor.pagemap import (
     calibrate_offset,
     assign_page_numbers,
     check_monotonic,
+    resolve_page_numbers,
 )
 
 
@@ -45,3 +46,33 @@ def test_check_monotonic_flags_breaks():
 
 def test_check_monotonic_clean_sequence_has_no_flags():
     assert check_monotonic([1, 2, 3]) == []
+
+
+def test_resolve_page_numbers_clean_sequence_has_no_flags():
+    page_numbers, flags = resolve_page_numbers(["Cough\n1", "TB\n2"], [1, 2])
+    assert page_numbers == [1, 2]
+    assert flags == []
+
+
+def test_resolve_page_numbers_flags_numbering_break():
+    # printed 5 then 3 on sheets 1,2 -> calibrated page_numbers [5,6];
+    # sheet 2's printed 3 disagrees with 6 -> flagged.
+    page_numbers, flags = resolve_page_numbers(["A\n5", "B\n3"], [1, 2])
+    assert flags == [1]
+
+
+def test_resolve_page_numbers_skips_pages_without_printed_number():
+    # middle sheet has no detectable number; offset 9 from the numbered pages.
+    page_numbers, flags = resolve_page_numbers(
+        ["A\n10", "B body with no page number", "C\n12"], [1, 2, 3]
+    )
+    assert page_numbers == [10, 11, 12]
+    assert flags == []
+
+
+def test_resolve_page_numbers_flags_restart():
+    # printed 1,2,1 -> offset 0, page_numbers [1,2,3]; sheet 3's printed 1
+    # both breaks monotonicity and disagrees with 3 -> flagged.
+    page_numbers, flags = resolve_page_numbers(["A\n1", "B\n2", "C\n1"], [1, 2, 3])
+    assert page_numbers == [1, 2, 3]
+    assert flags == [2]
