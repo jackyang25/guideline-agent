@@ -35,11 +35,11 @@ def build_messages(image_bytes: bytes, raw_text: str) -> list[dict]:
         {
             "role": "user",
             "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/png", "data": b64},
-                },
                 {"type": "text", "text": text},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                },
             ],
         }
     ]
@@ -56,27 +56,31 @@ def describe_page(
     client,
     image_bytes: bytes,
     raw_text: str,
-    model: str = "claude-opus-4-8",
-    max_tokens: int = 64000,
+    model: str = "gpt-4o",
+    max_tokens: int = 16000,
 ) -> tuple[str, str]:
-    with client.messages.stream(
+    response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
-        thinking={"type": "adaptive"},
-        output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
         messages=build_messages(image_bytes, raw_text),
-    ) as stream:
-        message = stream.get_final_message()
-
-    if message.stop_reason in ("max_tokens", "refusal"):
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "page_description",
+                "schema": _SCHEMA,
+                "strict": True,
+            },
+        },
+    )
+    choice = response.choices[0]
+    if choice.finish_reason in ("length", "content_filter"):
         raise RuntimeError(
-            f"describe_page: model stopped with stop_reason={message.stop_reason!r} "
+            f"describe_page: model stopped with finish_reason={choice.finish_reason!r} "
             "before producing a usable response"
         )
-
-    text_block = next((b for b in message.content if b.type == "text"), None)
-    if text_block is None:
+    content = choice.message.content
+    if content is None:
         raise RuntimeError(
-            f"describe_page: no text block in response (stop_reason={message.stop_reason!r})"
+            f"describe_page: no content in response (finish_reason={choice.finish_reason!r})"
         )
-    return parse_description(text_block.text)
+    return parse_description(content)

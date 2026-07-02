@@ -2,7 +2,7 @@ import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import anthropic
+from openai import OpenAI
 
 from .describe import describe_page
 from .models import Manifest, PageMapEntry, PageRecord
@@ -56,7 +56,7 @@ def extract(
     )
 
     if client is None and describe_fn is describe_page:
-        client = anthropic.Anthropic()
+        client = OpenAI()
 
     total = len(pages)
     if on_page is not None:
