@@ -155,13 +155,23 @@ derived artifact. Search indexes are derived from `prose` into `index/` only whe
 ### 4.5 Page numbering (printed vs PDF)
 
 References cite **printed** page numbers, which may differ from PDF sheet index (cover, front matter,
-offsets). Resolve this **at extraction**, not at query time:
-- `page_number` = printed number (read from the page corner).
-- `pdf_index` = sheet position, stored when it differs.
-- **QC check:** printed numbers should increase monotonically; flag any page that breaks the sequence
-  for human review against its image.
-- Unnumbered pages (tab dividers, roman-numeral front matter) fall back to `pdf_index`; references
-  rarely target these.
+offsets). Resolve this **at extraction** with one deterministic, calibrated method — never per-page
+guessing, and never checked again at query time:
+
+1. `pdf_index` = the deterministic sheet counter (`0..N-1`), always exact.
+2. **Calibrate the offset once:** read the printed number on a handful of body pages, compute
+   `offset = printed − pdf_index`. In a normal book it is constant.
+3. `page_number = pdf_index + offset`, applied deterministically to every page.
+4. **QC monotonicity gate (required, not optional):** confirm `page_number` increases cleanly and
+   matches printed numbers on spot-checks. Calibration + this gate together are what make the mapping
+   reliable — where a single global offset would be wrong (roman-numeral front matter, a section that
+   restarts numbering), the sequence breaks, those pages are flagged, and that block is handled
+   explicitly rather than shipped with a bad number.
+
+At query time the agent uses exactly one key, `page_number`. `pdf_index` is internal plumbing (locates
+the image file; fallback only for QC-flagged pages). Numeric references have exactly one resolver:
+deterministic `get_page(page_number)`. `search_prose` is for content/named references only — not a
+second way to resolve a number.
 
 ## 5. Extraction Output — Definition of Done
 
