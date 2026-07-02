@@ -1,5 +1,6 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import anthropic
 
@@ -44,6 +45,7 @@ def extract(
     rendered=None,
     concurrency: int = 25,
     limit: int | None = None,
+    on_page: Callable[[int, int], None] | None = None,
 ) -> tuple[Manifest, list[int]]:
     pages = rendered if rendered is not None else render_pdf(pdf_path)
     if limit is not None:
@@ -56,19 +58,30 @@ def extract(
     if client is None and describe_fn is describe_page:
         client = anthropic.Anthropic()
 
-    # Pages are independent, so describe them concurrently. ThreadPoolExecutor.map
-    # preserves input order, so map_entries stays in page order regardless of which
-    # worker finishes first. Effective concurrency is bounded by the account's
-    # token-per-minute limit; the SDK retries 429s with backoff.
+    total = len(pages)
+    if on_page is not None:
+        on_page(0, total)
+
+    # Pages are independent, so describe them concurrently. Effective concurrency is
+    # bounded by the account's token-per-minute limit; the SDK retries 429s with
+    # backoff. Results come back as they finish (for live progress) but are
+    # reassembled in page order for the manifest.
+    entries: dict[int, PageMapEntry] = {}
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
-        map_entries: list[PageMapEntry] = list(
-            executor.map(
-                lambda pair: _process_page(
-                    out_dir, guideline_id, pair[0], pair[1], describe_fn, client
-                ),
-                list(zip(pages, page_numbers)),
-            )
-        )
+        futures = {
+            executor.submit(
+                _process_page, out_dir, guideline_id, page, page_number, describe_fn, client
+            ): page.pdf_index
+            for page, page_number in zip(pages, page_numbers)
+        }
+        done = 0
+        for future in as_completed(futures):
+            entries[futures[future]] = future.result()  # re-raises page failures
+            done += 1
+            if on_page is not None:
+                on_page(done, total)
+
+    map_entries = [entries[p.pdf_index] for p in pages]
 
     manifest = Manifest(
         guideline_id=guideline_id,

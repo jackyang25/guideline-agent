@@ -127,3 +127,17 @@ def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
     assert [p.title for p in manifest.pages] == [f"Page{i}" for i in range(1, 6)]
     for i in range(1, 6):
         assert (tmp_path / "pages" / f"p00{i}.json").exists()
+
+
+def test_extract_reports_progress_via_on_page(tmp_path):
+    rendered = [RenderedPage(i, f"i{i}".encode(), f"P{i}\n{i}") for i in range(1, 4)]
+    calls = []
+    extract(
+        "ignored.pdf", str(tmp_path), "g",
+        guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
+        on_page=lambda done, total: calls.append((done, total)),
+    )
+    # an initial (0, N) then one call per completed page, ending at (N, N)
+    assert calls[0] == (0, 3)
+    assert calls[-1] == (3, 3)
+    assert sorted(d for d, _ in calls) == [0, 1, 2, 3]
