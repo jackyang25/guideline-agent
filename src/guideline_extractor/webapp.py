@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 
 from .pipeline import extract
 
-load_dotenv()  # read ANTHROPIC_API_KEY (and GE_OUTPUT_ROOT) from a .env file if present
+load_dotenv()  # read OPENAI_API_KEY (and GE_OUTPUT_ROOT) from a .env file if present
 
 app = FastAPI(title="Guideline Extractor")
 
