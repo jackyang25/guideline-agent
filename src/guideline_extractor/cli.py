@@ -14,6 +14,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--publisher", default=None)
     parser.add_argument("--version", default=None)
     parser.add_argument("--effective-date", default=None)
+    parser.add_argument(
+        "--concurrency", type=int, default=25,
+        help="Pages described in parallel (default 25). Raise it as high as your "
+             "token-per-minute limit sustains; the SDK retries 429s.",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Only process the first N pages (for a cheap smoke test).",
+    )
     args = parser.parse_args(argv)
 
     manifest, flags = extract(
@@ -25,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
         publisher=args.publisher,
         version=args.version,
         effective_date=args.effective_date,
+        concurrency=args.concurrency,
+        limit=args.limit,
     )
     print(f"Wrote {manifest.page_count} pages to {args.out_dir}")
     if flags:

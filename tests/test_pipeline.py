@@ -85,3 +85,45 @@ def test_extract_names_records_by_pdf_index_even_with_nonzero_offset(tmp_path):
     assert rec1["page_number"] == 40
     rec2 = json.loads((tmp_path / "pages" / "p002.json").read_text())
     assert rec2["page_number"] == 41
+
+
+def test_extract_respects_limit(tmp_path):
+    rendered = [
+        RenderedPage(1, b"a", "P1\n1"),
+        RenderedPage(2, b"b", "P2\n2"),
+        RenderedPage(3, b"c", "P3\n3"),
+    ]
+    manifest, _ = extract(
+        "ignored.pdf", str(tmp_path), "g",
+        guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
+        limit=2,
+    )
+    assert manifest.page_count == 2
+    assert [p.pdf_index for p in manifest.pages] == [1, 2]
+    assert not (tmp_path / "pages" / "p003.json").exists()
+
+
+def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
+    import threading
+
+    seen = []
+    lock = threading.Lock()
+
+    def describe(client, image_bytes, raw_text):
+        with lock:
+            seen.append(raw_text.splitlines()[0])
+        return raw_text.splitlines()[0], "prose"
+
+    rendered = [RenderedPage(i, f"img{i}".encode(), f"Page{i}\n{i}") for i in range(1, 6)]
+    manifest, _ = extract(
+        "ignored.pdf", str(tmp_path), "g",
+        guideline_title="t", describe_fn=describe, rendered=rendered,
+        concurrency=4,
+    )
+    # all pages processed
+    assert len(seen) == 5
+    # manifest map stays in page order regardless of completion order
+    assert [p.pdf_index for p in manifest.pages] == [1, 2, 3, 4, 5]
+    assert [p.title for p in manifest.pages] == [f"Page{i}" for i in range(1, 6)]
+    for i in range(1, 6):
+        assert (tmp_path / "pages" / f"p00{i}.json").exists()
