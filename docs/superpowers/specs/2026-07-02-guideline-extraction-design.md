@@ -5,6 +5,13 @@
 **Scope:** The *extraction* pipeline (PDF → structured page records). The querying agent is
 downstream and specced only as far as needed to validate that the extraction output supports it.
 
+> **Implementation note (provider):** the sections below describe the design in terms of Claude,
+> which was the original target. The shipped code uses the **OpenAI** vision + JSON-schema
+> structured-output API instead; the model is configurable via the `OPENAI_MODEL` env var
+> (default `gpt-5.5`). The fidelity-contract prompt, record schema, calibration/QC, and all
+> other design decisions are provider-agnostic and unchanged. Treat `describe.py` as the source
+> of truth for the API surface.
+
 ---
 
 ## 1. Problem & Motivation

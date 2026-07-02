@@ -50,14 +50,29 @@ class _FakeClient:
         self.chat = type("Chat", (), {"completions": _FakeCompletions(content, finish_reason)})()
 
 
-def test_describe_page_returns_title_and_prose_and_uses_json_schema():
+def test_describe_page_returns_title_and_prose_and_uses_json_schema(monkeypatch):
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     client = _FakeClient(json.dumps({"title": "T", "prose": "P"}))
     title, prose = describe_page(client, b"\x89PNG", "raw")
     assert (title, prose) == ("T", "P")
     kw = client.chat.completions.captured
-    assert kw["model"] == "gpt-4o"
+    assert kw["model"] == "gpt-5.5"  # default model
     assert kw["response_format"]["type"] == "json_schema"
     assert kw["response_format"]["json_schema"]["strict"] is True
+
+
+def test_describe_page_honors_openai_model_env(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
+    client = _FakeClient(json.dumps({"title": "T", "prose": "P"}))
+    describe_page(client, b"\x89PNG", "raw")
+    assert client.chat.completions.captured["model"] == "gpt-4o"
+
+
+def test_describe_page_explicit_model_overrides_env(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
+    client = _FakeClient(json.dumps({"title": "T", "prose": "P"}))
+    describe_page(client, b"\x89PNG", "raw", model="o4-mini")
+    assert client.chat.completions.captured["model"] == "o4-mini"
 
 
 def test_describe_page_raises_on_length_truncation():

@@ -1,5 +1,8 @@
 import base64
 import json
+import os
+
+DEFAULT_MODEL = "gpt-5.5"
 
 FIDELITY_PROMPT = (
     "Produce ONE self-contained textual description that fully encodes this "
@@ -56,12 +59,13 @@ def describe_page(
     client,
     image_bytes: bytes,
     raw_text: str,
-    model: str = "gpt-4o",
-    max_tokens: int = 16000,
+    model: str | None = None,
+    max_completion_tokens: int = 32000,
 ) -> tuple[str, str]:
+    model = model or os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     response = client.chat.completions.create(
         model=model,
-        max_tokens=max_tokens,
+        max_completion_tokens=max_completion_tokens,
         messages=build_messages(image_bytes, raw_text),
         response_format={
             "type": "json_schema",
