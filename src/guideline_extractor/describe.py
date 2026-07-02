@@ -57,7 +57,7 @@ def describe_page(
     image_bytes: bytes,
     raw_text: str,
     model: str = "claude-opus-4-8",
-    max_tokens: int = 16000,
+    max_tokens: int = 64000,
 ) -> tuple[str, str]:
     with client.messages.stream(
         model=model,
@@ -67,5 +67,16 @@ def describe_page(
         messages=build_messages(image_bytes, raw_text),
     ) as stream:
         message = stream.get_final_message()
-    text = next(b.text for b in message.content if b.type == "text")
-    return parse_description(text)
+
+    if message.stop_reason in ("max_tokens", "refusal"):
+        raise RuntimeError(
+            f"describe_page: model stopped with stop_reason={message.stop_reason!r} "
+            "before producing a usable response"
+        )
+
+    text_block = next((b for b in message.content if b.type == "text"), None)
+    if text_block is None:
+        raise RuntimeError(
+            f"describe_page: no text block in response (stop_reason={message.stop_reason!r})"
+        )
+    return parse_description(text_block.text)

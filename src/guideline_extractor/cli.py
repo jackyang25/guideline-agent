@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"Wrote {manifest.page_count} pages to {args.out_dir}")
     if flags:
-        print(f"WARNING: page-number QC flagged sheet indices (0-based): {flags}")
+        print(f"WARNING: page-number QC flagged page positions (0-based): {flags}")
     return 0
 
 
