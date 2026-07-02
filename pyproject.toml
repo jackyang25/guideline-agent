@@ -2,7 +2,7 @@
 name = "guideline-extractor"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["pymupdf>=1.24", "anthropic>=0.40"]
+dependencies = ["pymupdf>=1.24", "anthropic>=0.40", "python-dotenv>=1.0"]
 
 [project.optional-dependencies]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "markdown>=3.6"]

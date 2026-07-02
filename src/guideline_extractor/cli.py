@@ -1,7 +1,11 @@
 import argparse
 import sys
 
+from dotenv import load_dotenv
+
 from .pipeline import extract
+
+load_dotenv()  # read ANTHROPIC_API_KEY from a .env file if present
 
 
 def main(argv: list[str] | None = None) -> int:
