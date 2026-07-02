@@ -6,10 +6,13 @@ import threading
 from pathlib import Path
 
 import markdown as md
+from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
 from .pipeline import extract
+
+load_dotenv()  # read ANTHROPIC_API_KEY (and GE_OUTPUT_ROOT) from a .env file if present
 
 app = FastAPI(title="Guideline Extractor")
 
