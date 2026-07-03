@@ -139,8 +139,9 @@ def run_extract(
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> str:
-    return INDEX_HTML
+def index() -> HTMLResponse:
+    # no-store so the browser never runs a stale copy of the page's JS
+    return HTMLResponse(INDEX_HTML, headers={"Cache-Control": "no-store"})
 
 
 INDEX_HTML = """<!doctype html>
