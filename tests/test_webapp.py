@@ -129,3 +129,10 @@ def test_index_page_served(out_root):
     resp = client().get("/")
     assert resp.status_code == 200
     assert "Guideline Extractor" in resp.text
+
+
+def test_index_js_has_no_unescaped_newline_in_string_literal():
+    # The embedded JS must contain the two-char sequence backslash-n, not a real
+    # newline (which would be a JS syntax error and break every handler).
+    assert r"buf.indexOf('\n')" in webapp.INDEX_HTML
+    assert "buf.indexOf('\n')" not in webapp.INDEX_HTML  # literal newline = bug

@@ -144,7 +144,7 @@ def index() -> HTMLResponse:
     return HTMLResponse(INDEX_HTML, headers={"Cache-Control": "no-store"})
 
 
-INDEX_HTML = """<!doctype html>
+INDEX_HTML = r"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
