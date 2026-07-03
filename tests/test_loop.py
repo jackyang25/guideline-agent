@@ -100,3 +100,47 @@ def test_answer_incomplete_when_turns_exhausted(lib):
     client = _FakeClient(scripted)
     result = loop.answer("q", client=client, max_turns=3)
     assert result.complete is False
+
+
+def test_answer_handles_bad_page_number_in_citation(lib):
+    client = _FakeClient([
+        _response(tool_calls=[_tool_call("1", "submit_answer", {
+            "answer": "Screen for TB if cough >= 2 weeks.",
+            "citations": [
+                {"guideline_id": "APC", "page_number": "n/a"},
+                {"guideline_id": "APC", "page_number": None},
+                {"guideline_id": "APC", "page_number": 10},
+            ]})]),
+    ])
+    result = loop.answer("what to do for a long cough", client=client)
+    assert result.complete is True
+    # the valid citation still resolves with its title
+    assert {"guideline_id": "APC", "page_number": 10, "title": "Cough"} in result.citations
+
+
+def _raw_tool_call(cid, name, raw_arguments):
+    fn = type("Fn", (), {"name": name, "arguments": raw_arguments})()
+    return type("TC", (), {"id": cid, "function": fn})()
+
+
+def test_answer_handles_malformed_tool_call_arguments(lib):
+    client = _FakeClient([
+        _response(tool_calls=[_raw_tool_call("1", "search_pages", "{not json")]),
+        _response(tool_calls=[_tool_call("2", "submit_answer", {
+            "answer": "done", "citations": []})]),
+    ])
+    result = loop.answer("q", client=client)
+    assert result.complete is True
+    # the malformed call was fed back as a failed tool result, not a crash
+    first_call_msgs = client.chat.completions.calls[-1]["messages"]
+    tool_msgs = [m for m in first_call_msgs if m.get("role") == "tool" and m.get("tool_call_id") == "1"]
+    assert tool_msgs
+    assert "error" in json.loads(tool_msgs[0]["content"])
+
+
+def test_answer_handles_malformed_submit_answer_arguments(lib):
+    client = _FakeClient([
+        _response(tool_calls=[_raw_tool_call("1", "submit_answer", "{not json")]),
+    ])
+    result = loop.answer("q", client=client)
+    assert result.complete is False

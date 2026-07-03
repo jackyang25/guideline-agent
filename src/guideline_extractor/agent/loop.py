@@ -35,7 +35,7 @@ def _enrich(citations) -> list[dict]:
         try:
             rec = library.load_page(gid, int(pn))
             title = rec["title"] if rec else None
-        except LookupError:
+        except (LookupError, ValueError, TypeError):
             title = None
         out.append({"guideline_id": gid, "page_number": pn, "title": title})
     return out
@@ -90,7 +90,14 @@ def answer(query: str, client=None, model: str | None = None, max_turns: int = 1
 
         messages.append(_assistant_message(msg))
         for tc in msg.tool_calls:
-            args = json.loads(tc.function.arguments or "{}")
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except json.JSONDecodeError:
+                if tc.function.name == "submit_answer":
+                    return AnswerResult("", [], False)
+                messages.append({"role": "tool", "tool_call_id": tc.id,
+                                  "content": json.dumps({"error": "invalid tool arguments"})})
+                continue
             if tc.function.name == "submit_answer":
                 return AnswerResult(args.get("answer", ""), _enrich(args.get("citations")), True)
             emit({"type": "tool_call", "name": tc.function.name, "args": args})
