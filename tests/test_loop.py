@@ -153,3 +153,7 @@ def test_system_prompt_states_grounding_and_gathering_protocol():
     assert "neighbouring page" in p                            # continuation via neighbors
     assert "do not answer until" in p                          # enough context before answering
     assert "submit_answer" in loop.SYSTEM_PROMPT               # terminal + decline path
+    # preserve decision routing (do not flatten branching pages)
+    assert "do not flatten" in p
+    assert "where it leads" in p
+    assert "do not ask the user questions yourself" in p
