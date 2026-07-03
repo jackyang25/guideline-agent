@@ -144,3 +144,12 @@ def test_answer_handles_malformed_submit_answer_arguments(lib):
     ])
     result = loop.answer("q", client=client)
     assert result.complete is False
+
+
+def test_system_prompt_states_grounding_and_gathering_protocol():
+    p = loop.SYSTEM_PROMPT.lower()
+    assert "only" in p and "do not use outside" in p          # grounding
+    assert "see p.112" in p                                    # follow relevant references
+    assert "neighbouring page" in p                            # continuation via neighbors
+    assert "do not answer until" in p                          # enough context before answering
+    assert "submit_answer" in loop.SYSTEM_PROMPT               # terminal + decline path
