@@ -158,8 +158,10 @@ Viewer tabs per page: Prose (rendered), Raw text, JSON (the exact stored record)
 ```
 .venv/bin/python -m page2prose.cli PDF OUT_ROOT --limit 3 --concurrency 25
 ```
-Guideline **id, title, jurisdiction, and version are auto-detected from the cover page** (a `detect_metadata`
-vision call on page 1); `id` defaults to a slug of the title. Pass `--guideline-id` / `--guideline-title` /
+Guideline **id, title, jurisdiction, and version are auto-detected from the front matter** (a single
+`detect_metadata` call: the cover image + the text of the first ~3 pages, where bibliographic metadata
+lives; absent fields stay `null`, dates normalized to `YYYY-MM-DD`/`YYYY`); `id` defaults to a slug of
+the title. Pass `--guideline-id` / `--guideline-title` /
 `--jurisdiction` / `--version` to override any of them. Output is written to `OUT_ROOT/<id>`.
 
 ## 7. Configuration (`.env`)

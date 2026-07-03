@@ -11,6 +11,8 @@ from .render import render_pdf
 from .storage import save_image, write_manifest, write_page_record
 from .util import slugify
 
+FRONT_MATTER_PAGES = 3  # cover + title/imprint pages, where guideline metadata lives
+
 
 def _process_page(out_dir, guideline_id, page, page_number, describe_fn, client) -> PageMapEntry:
     """Describe one page and write its record + image. Runs per worker thread."""
@@ -66,7 +68,11 @@ def extract(
         v is None for v in (guideline_title, jurisdiction, publisher, version, effective_date)
     )
     if need_detect and detect_fn is not None and client is not None:
-        detected = detect_fn(client, pages[0].image_bytes, pages[0].raw_text)
+        # Metadata lives in the front matter (cover + title/imprint page), not just
+        # page 1 — send the cover image plus the text of the first few pages.
+        front = pages[:FRONT_MATTER_PAGES]
+        front_text = "\n\n".join(f"[page {p.pdf_index}]\n{p.raw_text}" for p in front)
+        detected = detect_fn(client, pages[0].image_bytes, front_text)
         guideline_title = guideline_title or detected.get("title")
         jurisdiction = jurisdiction or detected.get("jurisdiction")
         publisher = publisher or detected.get("publisher")
