@@ -24,7 +24,7 @@
 ### Task 1: Library — read-only access to `guidelines/`
 
 **Files:**
-- Create: `src/guideline_extractor/library.py`
+- Create: `src/page2prose/library.py`
 - Test: `tests/test_library.py`
 
 **Interfaces:**
@@ -41,7 +41,7 @@
 # tests/test_library.py
 import json
 import pytest
-from guideline_extractor import library
+from page2prose import library
 
 
 @pytest.fixture
@@ -105,12 +105,12 @@ def test_neighbors(lib):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_library.py -q`
-Expected: FAIL — `ModuleNotFoundError: No module named 'guideline_extractor.library'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'page2prose.library'`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# src/guideline_extractor/library.py
+# src/page2prose/library.py
 import json
 import os
 from pathlib import Path
@@ -190,7 +190,7 @@ Expected: PASS (6 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/guideline_extractor/library.py tests/test_library.py
+git add src/page2prose/library.py tests/test_library.py
 git commit -m "feat: read-only library over guidelines output"
 ```
 
@@ -200,8 +200,8 @@ git commit -m "feat: read-only library over guidelines output"
 
 **Files:**
 - Modify: `pyproject.toml` (add `rank-bm25` to base deps)
-- Create: `src/guideline_extractor/agent/__init__.py`
-- Create: `src/guideline_extractor/agent/tools.py`
+- Create: `src/page2prose/agent/__init__.py`
+- Create: `src/page2prose/agent/tools.py`
 - Test: `tests/test_tools.py`
 
 **Interfaces:**
@@ -219,7 +219,7 @@ git commit -m "feat: read-only library over guidelines output"
 # tests/test_tools.py
 import json
 import pytest
-from guideline_extractor.agent import tools
+from page2prose.agent import tools
 
 
 @pytest.fixture
@@ -287,7 +287,7 @@ def test_tool_specs_cover_all_four():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_tools.py -q`
-Expected: FAIL — `ModuleNotFoundError: No module named 'guideline_extractor.agent'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'page2prose.agent'`
 
 - [ ] **Step 3: Add the dependency, then implement**
 
@@ -300,11 +300,11 @@ dependencies = ["pymupdf>=1.24", "openai>=1.40", "python-dotenv>=1.0", "rank-bm2
 Reinstall: `.venv/bin/pip install -e ".[dev]"`
 
 ```python
-# src/guideline_extractor/agent/__init__.py
+# src/page2prose/agent/__init__.py
 ```
 
 ```python
-# src/guideline_extractor/agent/tools.py
+# src/page2prose/agent/tools.py
 import re
 
 from rank_bm25 import BM25Okapi
@@ -424,7 +424,7 @@ Expected: PASS (7 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pyproject.toml src/guideline_extractor/agent/__init__.py src/guideline_extractor/agent/tools.py tests/test_tools.py
+git add pyproject.toml src/page2prose/agent/__init__.py src/page2prose/agent/tools.py tests/test_tools.py
 git commit -m "feat: agent tools (list/search/get) with BM25 and OpenAI tool specs"
 ```
 
@@ -433,7 +433,7 @@ git commit -m "feat: agent tools (list/search/get) with BM25 and OpenAI tool spe
 ### Task 3: The agent loop
 
 **Files:**
-- Create: `src/guideline_extractor/agent/loop.py`
+- Create: `src/page2prose/agent/loop.py`
 - Test: `tests/test_loop.py`
 
 **Interfaces:**
@@ -452,8 +452,8 @@ git commit -m "feat: agent tools (list/search/get) with BM25 and OpenAI tool spe
 # tests/test_loop.py
 import json
 import pytest
-from guideline_extractor.agent import loop
-from guideline_extractor.agent import tools
+from page2prose.agent import loop
+from page2prose.agent import tools
 
 
 @pytest.fixture
@@ -557,12 +557,12 @@ def test_answer_incomplete_when_turns_exhausted(lib):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_loop.py -q`
-Expected: FAIL — `ModuleNotFoundError: No module named 'guideline_extractor.agent.loop'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'page2prose.agent.loop'`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# src/guideline_extractor/agent/loop.py
+# src/page2prose/agent/loop.py
 import json
 import os
 from dataclasses import dataclass, field
@@ -675,7 +675,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/guideline_extractor/agent/loop.py tests/test_loop.py
+git add src/page2prose/agent/loop.py tests/test_loop.py
 git commit -m "feat: grounded answering agent loop with submit_answer terminal tool"
 ```
 
@@ -684,7 +684,7 @@ git commit -m "feat: grounded answering agent loop with submit_answer terminal t
 ### Task 4: CLI entrypoint
 
 **Files:**
-- Create: `src/guideline_extractor/ask.py`
+- Create: `src/page2prose/ask.py`
 - Test: `tests/test_ask.py`
 
 **Interfaces:**
@@ -695,8 +695,8 @@ git commit -m "feat: grounded answering agent loop with submit_answer terminal t
 
 ```python
 # tests/test_ask.py
-from guideline_extractor import ask
-from guideline_extractor.agent.loop import AnswerResult
+from page2prose import ask
+from page2prose.agent.loop import AnswerResult
 
 
 def test_ask_prints_answer_and_sources(capsys, monkeypatch):
@@ -732,12 +732,12 @@ def test_ask_notes_incomplete(capsys, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_ask.py -q`
-Expected: FAIL — `ModuleNotFoundError: No module named 'guideline_extractor.ask'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'page2prose.ask'`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# src/guideline_extractor/ask.py
+# src/page2prose/ask.py
 import argparse
 import sys
 
@@ -786,7 +786,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/guideline_extractor/ask.py tests/test_ask.py
+git add src/page2prose/ask.py tests/test_ask.py
 git commit -m "feat: CLI to ask the guideline agent"
 ```
 
@@ -795,7 +795,7 @@ git commit -m "feat: CLI to ask the guideline agent"
 ### Task 5: Web `/api/ask` + query box in the UI
 
 **Files:**
-- Modify: `src/guideline_extractor/webapp.py`
+- Modify: `src/page2prose/webapp.py`
 - Test: `tests/test_webapp_ask.py`
 
 **Interfaces:**
@@ -812,8 +812,8 @@ git commit -m "feat: CLI to ask the guideline agent"
 # tests/test_webapp_ask.py
 import json
 from fastapi.testclient import TestClient
-from guideline_extractor import webapp
-from guideline_extractor.agent.loop import AnswerResult
+from page2prose import webapp
+from page2prose.agent.loop import AnswerResult
 
 
 def test_ask_endpoint_streams_trace_then_done(monkeypatch, tmp_path):
@@ -858,7 +858,7 @@ def test_index_has_ask_box(monkeypatch, tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_webapp_ask.py -q`
-Expected: FAIL — `AttributeError: module 'guideline_extractor.webapp' has no attribute 'answer'` (or 404 on `/api/ask`)
+Expected: FAIL — `AttributeError: module 'page2prose.webapp' has no attribute 'answer'` (or 404 on `/api/ask`)
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1000,7 +1000,7 @@ Run: `.venv/bin/python -m pytest -q`
 Expected: PASS (all tests)
 
 ```bash
-git add src/guideline_extractor/webapp.py tests/test_webapp_ask.py
+git add src/page2prose/webapp.py tests/test_webapp_ask.py
 git commit -m "feat: /api/ask endpoint and query box in the UI"
 ```
 
@@ -1011,7 +1011,7 @@ git commit -m "feat: /api/ask endpoint and query box in the UI"
 With a real key in `.env` and an extraction present (e.g. `guidelines/1`):
 
 ```bash
-.venv/bin/python -m guideline_extractor.ask "what should I do for an adult with a cough for 3 weeks and weight loss?"
+.venv/bin/python -m page2prose.ask "what should I do for an adult with a cough for 3 weeks and weight loss?"
 ```
 
 Confirm the answer is grounded (mentions TB screening per the guideline) and lists Sources with page numbers. Then start the web app, type the same question in the ask bar, and confirm the answer + sources render.

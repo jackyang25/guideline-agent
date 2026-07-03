@@ -1,7 +1,7 @@
 import json
 
-from guideline_extractor.models import Manifest, PageMapEntry, PageRecord
-from guideline_extractor.storage import (
+from page2prose.models import Manifest, PageMapEntry, PageRecord
+from page2prose.storage import (
     image_filename,
     record_filename,
     save_image,

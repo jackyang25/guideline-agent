@@ -1,5 +1,5 @@
-from guideline_extractor import ask
-from guideline_extractor.agent.loop import AnswerResult
+from page2prose import ask
+from page2prose.agent.loop import AnswerResult
 
 
 def test_ask_prints_answer_and_sources(capsys, monkeypatch):

@@ -1,7 +1,7 @@
 import json
 from fastapi.testclient import TestClient
-from guideline_extractor import webapp
-from guideline_extractor.agent.loop import AnswerResult
+from page2prose import webapp
+from page2prose.agent.loop import AnswerResult
 
 
 def test_ask_endpoint_streams_trace_then_done(monkeypatch, tmp_path):

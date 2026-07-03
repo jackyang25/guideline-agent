@@ -1,5 +1,5 @@
 # tests/test_models.py
-from guideline_extractor.models import PageRecord, PageMapEntry, Manifest
+from page2prose.models import PageRecord, PageMapEntry, Manifest
 
 
 def test_page_record_to_dict_round_trips_fields():

@@ -22,7 +22,7 @@ OPENAI_MODEL=gpt-5.5
 ## Run the web UI
 
 ```bash
-.venv/bin/python -m guideline_extractor.webapp
+.venv/bin/python -m page2prose.webapp
 ```
 
 Open http://127.0.0.1:8000. Upload a PDF, set **ID** / **Title**, optionally **Limit** (first N pages,
@@ -36,7 +36,7 @@ Stop with `Ctrl+C`. If a start fails with "address already in use", a previous s
 ## Run the CLI
 
 ```bash
-.venv/bin/python -m guideline_extractor.cli PDF OUT_DIR \
+.venv/bin/python -m page2prose.cli PDF OUT_DIR \
   --guideline-id APC_2023_ZA --guideline-title "Adult Primary Care (APC) 2023" \
   --jurisdiction "South Africa" --version 2023 --limit 3 --concurrency 25
 ```

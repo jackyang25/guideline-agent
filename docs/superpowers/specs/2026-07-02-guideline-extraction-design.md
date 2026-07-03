@@ -150,13 +150,13 @@ Documented to confirm the extraction output supports it. Not implemented.
 
 **Web UI** (upload → extract with live progress → inspect each page's data block):
 ```
-.venv/bin/python -m guideline_extractor.webapp   # http://127.0.0.1:8000
+.venv/bin/python -m page2prose.webapp   # http://127.0.0.1:8000
 ```
 Viewer tabs per page: Prose (rendered), Raw text, JSON (the exact stored record), Page image.
 
 **CLI:**
 ```
-.venv/bin/python -m guideline_extractor.cli PDF OUT_DIR \
+.venv/bin/python -m page2prose.cli PDF OUT_DIR \
   --guideline-id APC_2023_ZA --guideline-title "Adult Primary Care (APC) 2023" \
   --jurisdiction "South Africa" --version 2023 --limit 3 --concurrency 25
 ```

@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF
 import pytest
-from guideline_extractor.render import render_pdf, RenderedPage
+from page2prose.render import render_pdf, RenderedPage
 
 
 @pytest.fixture
