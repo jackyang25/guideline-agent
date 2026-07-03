@@ -62,7 +62,7 @@ All read-only over `guidelines/` (rooted at `GE_OUTPUT_ROOT`, default `./guideli
 
 ## 4. The loop
 
-`answer(query, model=None, max_turns=12) -> AnswerResult`:
+`answer(query, model=None, max_turns=12, on_event=None) -> AnswerResult`:
 1. Build messages: system prompt (§5) + user query. Offer the four tools.
 2. Call the model (OpenAI Chat Completions, tool-calling). Model default from `OPENAI_MODEL`
    (`gpt-5.5`).
@@ -73,6 +73,15 @@ All read-only over `guidelines/` (rooted at `GE_OUTPUT_ROOT`, default `./guideli
 
 `AnswerResult`: `{answer: str, citations: [{guideline_id, page_number, title}], complete: bool}`
 (titles resolved from the manifest for display/linking).
+
+**Traceability (live navigation).** So a caller can watch the agent work, the loop takes an optional
+`on_event(event: dict)` callback, invoked as it navigates:
+- `{"type": "tool_call", "name", "args"}` — before executing a tool the model requested.
+- `{"type": "tool_result", "name", "summary"}` — after, `summary` a short human string (e.g.
+  `"3 pages: p.34, p.38"` or `"p.34 — Cough"`).
+The callback is the trace source for both entrypoints (§6): the CLI prints the steps, the UI streams
+them live. `submit_answer` is not emitted as a tool event — it becomes the returned `AnswerResult` /
+the stream's terminal `done` event.
 
 ## 5. System prompt (grounding contract)
 
@@ -88,10 +97,13 @@ One prompt, provider-agnostic in spirit:
 
 ## 6. Entrypoints
 
-- **CLI:** `python -m guideline_extractor.ask "QUERY"` → prints the answer and a Sources list
-  (`guideline_id p.N — title`). The testable core.
-- **UI:** a query box + `POST /api/ask` in the existing web app. Returns `{answer, citations}`;
-  the UI renders the answer and lists cited pages as links into the existing page viewer.
+- **CLI:** `python -m guideline_extractor.ask "QUERY"` → prints each navigation step live (from
+  `on_event`), then the answer and a Sources list (`guideline_id p.N — title`). The testable core.
+- **UI:** a query box + `POST /api/ask` in the existing web app that **streams NDJSON** (same pattern
+  as extraction progress): `tool_call` / `tool_result` events as the agent navigates, then a terminal
+  `{"type": "done", "answer", "citations", "complete"}` (or `{"type": "error", "detail"}`). The UI
+  shows the live trace ("search_pages: cough → 3 pages", "get_page: p.34 — Cough"), then renders the
+  answer with its cited pages listed.
 
 Both load `.env` (needs `OPENAI_API_KEY`).
 

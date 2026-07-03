@@ -17,6 +17,7 @@
 - `submit_answer(answer, citations)` is the terminal tool; `citations = [{guideline_id, page_number}]`.
 - No network in tests: the loop takes an injectable `client`; tools/library read a fixture `guidelines/` dir via `GE_OUTPUT_ROOT`.
 - Path safety: reject `guideline_id` values that escape the root.
+- Traceability: the loop emits `on_event` `tool_call`/`tool_result` events as it navigates; the CLI prints them and `/api/ask` streams NDJSON (`tool_call`/`tool_result` → terminal `done`/`error`) so the UI shows the agent navigating live.
 
 ---
 
@@ -440,7 +441,10 @@ git commit -m "feat: agent tools (list/search/get) with BM25 and OpenAI tool spe
 - Produces:
   - `AnswerResult` dataclass: `answer: str`, `citations: list[dict]` (`[{guideline_id, page_number, title}]`), `complete: bool`.
   - `SYSTEM_PROMPT: str`.
-  - `answer(query: str, client=None, model: str | None = None, max_turns: int = 12) -> AnswerResult`.
+  - `answer(query: str, client=None, model: str | None = None, max_turns: int = 12, on_event=None) -> AnswerResult`.
+    `on_event`, if given, is called with `{"type": "tool_call", "name", "args"}` before each tool runs
+    and `{"type": "tool_result", "name", "summary"}` after (short human summary). `submit_answer` is
+    not emitted as an event.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -511,6 +515,24 @@ def test_answer_runs_tools_then_submits(lib):
     # the get_page result was fed back as a tool message before the final turn
     last_msgs = client.chat.completions.calls[-1]["messages"]
     assert any(m.get("role") == "tool" for m in last_msgs)
+
+
+def test_answer_emits_trace_events(lib):
+    client = _FakeClient([
+        _response(tool_calls=[_tool_call("1", "search_pages", {"guideline_id": "APC", "query": "cough"})]),
+        _response(tool_calls=[_tool_call("2", "get_page", {"guideline_id": "APC", "page_number": 10})]),
+        _response(tool_calls=[_tool_call("3", "submit_answer", {"answer": "a", "citations": []})]),
+    ])
+    events = []
+    loop.answer("q", client=client, on_event=events.append)
+    kinds = [(e["type"], e["name"]) for e in events]
+    assert ("tool_call", "search_pages") in kinds
+    assert ("tool_result", "search_pages") in kinds
+    assert ("tool_call", "get_page") in kinds
+    # submit_answer is not emitted as a tool event
+    assert all(e["name"] != "submit_answer" for e in events)
+    # results carry a short human summary string
+    assert all(isinstance(e["summary"], str) for e in events if e["type"] == "tool_result")
 
 
 def test_answer_can_decline(lib):
@@ -596,11 +618,30 @@ def _assistant_message(msg) -> dict:
     }
 
 
-def answer(query: str, client=None, model: str | None = None, max_turns: int = 12) -> AnswerResult:
+def _summarize(name: str, result) -> str:
+    if isinstance(result, dict) and "error" in result:
+        return result["error"]
+    if name == "search_pages":
+        if not result:
+            return "no matches"
+        return f"{len(result)} pages: " + ", ".join(f"p.{h['page_number']}" for h in result)
+    if name == "get_page":
+        return f"p.{result['page_number']} — {result.get('title', '')}"
+    if name == "list_guidelines":
+        return f"{len(result)} guidelines"
+    return ""
+
+
+def answer(query: str, client=None, model: str | None = None, max_turns: int = 12,
+           on_event=None) -> AnswerResult:
     if client is None:
         from openai import OpenAI
         client = OpenAI()
     model = model or os.environ.get("OPENAI_MODEL", "gpt-5.5")
+
+    def emit(event):
+        if on_event is not None:
+            on_event(event)
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": query}]
@@ -617,7 +658,10 @@ def answer(query: str, client=None, model: str | None = None, max_turns: int = 1
             args = json.loads(tc.function.arguments or "{}")
             if tc.function.name == "submit_answer":
                 return AnswerResult(args.get("answer", ""), _enrich(args.get("citations")), True)
+            emit({"type": "tool_call", "name": tc.function.name, "args": args})
             result = tools.run_read_tool(tc.function.name, args)
+            emit({"type": "tool_result", "name": tc.function.name,
+                  "summary": _summarize(tc.function.name, result)})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
 
     return AnswerResult("", [], False)
@@ -665,6 +709,18 @@ def test_ask_prints_answer_and_sources(capsys, monkeypatch):
     assert "APC" in out and "p.10" in out and "Cough" in out
 
 
+def test_ask_prints_live_trace(capsys, monkeypatch):
+    def fake_answer(q, on_event=None, **k):
+        if on_event:
+            on_event({"type": "tool_call", "name": "search_pages", "args": {"query": "cough"}})
+            on_event({"type": "tool_result", "name": "search_pages", "summary": "1 pages: p.10"})
+        return AnswerResult("ok", [], True)
+    monkeypatch.setattr(ask, "answer", fake_answer)
+    ask.main(["q"])
+    err = capsys.readouterr().err
+    assert "search_pages" in err
+
+
 def test_ask_notes_incomplete(capsys, monkeypatch):
     monkeypatch.setattr(ask, "answer", lambda q, **k: AnswerResult("", [], False))
     rc = ask.main(["q"])
@@ -692,12 +748,19 @@ from .agent.loop import answer
 load_dotenv()
 
 
+def _print_step(event: dict) -> None:
+    if event["type"] == "tool_call":
+        print(f"  → {event['name']}({event.get('args', {})})", file=sys.stderr)
+    elif event["type"] == "tool_result":
+        print(f"    {event['name']}: {event['summary']}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ask a question over the extracted guidelines.")
     parser.add_argument("query")
     args = parser.parse_args(argv)
 
-    result = answer(args.query)
+    result = answer(args.query, on_event=_print_step)
     if not result.complete or not result.answer:
         print("No answer (the agent could not complete or found nothing relevant).")
         return 0
@@ -736,30 +799,54 @@ git commit -m "feat: CLI to ask the guideline agent"
 - Test: `tests/test_webapp_ask.py`
 
 **Interfaces:**
-- Consumes: `loop.answer` (Task 3).
+- Consumes: `loop.answer` (Task 3) — including its `on_event` callback.
 - Produces:
-  - `POST /api/ask` — body `{"query": str}` → `{"answer": str, "citations": [...], "complete": bool}`.
-  - A query box + answer panel in `INDEX_HTML`.
+  - `POST /api/ask` — body `{"query": str}` → **streams NDJSON**: `tool_call` / `tool_result` events
+    (from `on_event`) as the agent navigates, then a terminal `{"type": "done", "answer", "citations",
+    "complete"}` or `{"type": "error", "detail"}`.
+  - A query box + live-trace/answer panel in `INDEX_HTML`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_webapp_ask.py
+import json
 from fastapi.testclient import TestClient
 from guideline_extractor import webapp
 from guideline_extractor.agent.loop import AnswerResult
 
 
-def test_ask_endpoint_returns_answer(monkeypatch, tmp_path):
+def test_ask_endpoint_streams_trace_then_done(monkeypatch, tmp_path):
     monkeypatch.setenv("GE_OUTPUT_ROOT", str(tmp_path))
-    monkeypatch.setattr(webapp, "answer", lambda q, **k: AnswerResult(
-        "Screen for TB.", [{"guideline_id": "APC", "page_number": 10, "title": "Cough"}], True))
+
+    def fake_answer(q, on_event=None, **k):
+        if on_event:
+            on_event({"type": "tool_call", "name": "search_pages", "args": {"query": "cough"}})
+            on_event({"type": "tool_result", "name": "search_pages", "summary": "1 pages: p.10"})
+        return AnswerResult("Screen for TB.",
+                            [{"guideline_id": "APC", "page_number": 10, "title": "Cough"}], True)
+
+    monkeypatch.setattr(webapp, "answer", fake_answer)
     resp = TestClient(webapp.app).post("/api/ask", json={"query": "long cough"})
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["answer"] == "Screen for TB."
-    assert body["citations"][0]["page_number"] == 10
-    assert body["complete"] is True
+    events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    assert any(e["type"] == "tool_call" and e["name"] == "search_pages" for e in events)
+    assert any(e["type"] == "tool_result" for e in events)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["answer"] == "Screen for TB."
+    assert events[-1]["citations"][0]["page_number"] == 10
+    assert events[-1]["complete"] is True
+
+
+def test_ask_endpoint_streams_error(monkeypatch, tmp_path):
+    monkeypatch.setenv("GE_OUTPUT_ROOT", str(tmp_path))
+    def boom(q, **k):
+        raise RuntimeError("no api key")
+    monkeypatch.setattr(webapp, "answer", boom)
+    resp = TestClient(webapp.app).post("/api/ask", json={"query": "x"})
+    events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    assert events[-1]["type"] == "error"
+    assert "no api key" in events[-1]["detail"]
 
 
 def test_index_has_ask_box(monkeypatch, tmp_path):
@@ -781,21 +868,43 @@ Add the import near the top of `webapp.py` (with the other local imports):
 from .agent.loop import answer
 ```
 
-Add the endpoint (place it near the other `/api` routes, e.g. before the `index()` handler):
+`webapp.py` already imports `json`, `queue`, `threading`, `StreamingResponse`, and `HTTPException`
+(from the extraction streaming endpoint). Add the endpoint (place it near the other `/api` routes,
+e.g. before the `index()` handler):
 
 ```python
 @app.post("/api/ask")
-def run_ask(body: dict) -> JSONResponse:
+def run_ask(body: dict) -> StreamingResponse:
     query = (body or {}).get("query", "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="empty query")
-    try:
-        result = answer(query)
-    except Exception as exc:  # surface auth/model errors to the UI
-        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
-    return JSONResponse({"answer": result.answer, "citations": result.citations,
-                         "complete": result.complete})
+
+    events: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        try:
+            result = answer(query, on_event=events.put)
+            events.put({"type": "done", "answer": result.answer,
+                        "citations": result.citations, "complete": result.complete})
+        except Exception as exc:  # surface auth/model errors as a stream event
+            events.put({"type": "error", "detail": f"{type(exc).__name__}: {exc}"})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def stream():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 ```
+
+Note: `answer`'s `on_event` receives `tool_call`/`tool_result` dicts, which are JSON-serializable, so
+`events.put` can be passed directly as the callback.
 
 In `INDEX_HTML`, add an ask bar just inside `<main>` — replace the opening of the `<main>` block:
 
@@ -820,29 +929,65 @@ Replace with:
 </main>
 ```
 
-Add this handler to the `<script>` (before the final `loadGuidelines();` call):
+Add this handler to the `<script>` (before the final `loadGuidelines();` call). It reads the NDJSON
+stream and shows the trace live, then the answer:
 
 ```javascript
 async function runAsk() {
   const q = $('#ask').value.trim();
   if (!q) return;
-  $('#answer').innerHTML = '<div class="empty">thinking...</div>';
+  const trace = [];
+  const render = (answerHtml) => {
+    const traceHtml = trace.length
+      ? '<div style="color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace;margin-bottom:12px;">'
+        + trace.map(escapeHtml).join('<br>') + '</div>'
+      : '';
+    $('#answer').innerHTML = traceHtml + (answerHtml || '');
+  };
+  trace.push('thinking...');
+  render('');
   const res = await fetch('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-  if (!res.ok) { const j = await res.json().catch(()=>({detail:res.status})); $('#answer').innerHTML = '<div class="empty">error: '+(j.detail||res.status)+'</div>'; return; }
-  const r = await res.json();
-  let html = '<div class="prose">'+escapeHtml(r.answer || '(no answer)')+'</div>';
-  if (r.citations && r.citations.length) {
-    html += '<p style="color:var(--muted);font-size:12px;">Sources: '
-      + r.citations.map(c => escapeHtml(c.guideline_id)+' p.'+c.page_number+(c.title?(' — '+escapeHtml(c.title)):'')).join('; ')
-      + '</p>';
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream:true});
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const m = JSON.parse(line);
+      if (m.type === 'tool_call') {
+        if (trace[trace.length-1] === 'thinking...') trace.pop();
+        trace.push('→ ' + m.name + '(' + JSON.stringify(m.args) + ')');
+        render('');
+      } else if (m.type === 'tool_result') {
+        trace.push('   ' + m.name + ': ' + m.summary);
+        render('');
+      } else if (m.type === 'done') {
+        let html = '<div class="prose">' + escapeHtml(m.answer || '(no answer)') + '</div>';
+        if (m.citations && m.citations.length) {
+          html += '<p style="color:var(--muted);font-size:12px;">Sources: '
+            + m.citations.map(c => escapeHtml(c.guideline_id)+' p.'+c.page_number+(c.title?(' — '+escapeHtml(c.title)):'')).join('; ')
+            + '</p>';
+        }
+        render(html);
+      } else if (m.type === 'error') {
+        render('<div class="empty">error: ' + escapeHtml(m.detail) + '</div>');
+      }
+    }
   }
-  $('#answer').innerHTML = html;
 }
 $('#askbtn').onclick = runAsk;
 $('#ask').onkeydown = e => { if (e.key === 'Enter') runAsk(); };
 ```
 
-Note: `selectPage` overwrites `#block`'s innerHTML; that is acceptable — clicking a page replaces the answer view with the page block, and re-running a query is done from the ask bar which reappears on reload. Leave that behavior as-is (YAGNI).
+Note: `selectPage` overwrites `#block`'s innerHTML; that is acceptable — clicking a page replaces the
+answer view with the page block, and re-running a query is done from the ask bar which reappears on
+reload. Leave that behavior as-is (YAGNI).
 
 - [ ] **Step 4: Run test to verify it passes**
 
