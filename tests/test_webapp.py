@@ -99,7 +99,7 @@ def test_extract_endpoint_streams_progress_then_done(out_root, monkeypatch):
     monkeypatch.setattr(webapp, "extract", fake_extract)
     resp = client().post(
         "/api/extract",
-        data={"guideline_id": "G1", "guideline_title": "Title", "limit": "2"},
+        data={"guideline_id": "G1", "guideline_title": "Title", "limit": "2", "concurrency": "8"},
         files={"file": ("doc.pdf", b"%PDF-1.4 fake", "application/pdf")},
     )
     assert resp.status_code == 200
@@ -108,6 +108,7 @@ def test_extract_endpoint_streams_progress_then_done(out_root, monkeypatch):
     assert progress[-1] == {"type": "progress", "done": 2, "total": 2}
     assert events[-1] == {"type": "done", "guideline_id": "G1", "page_count": 2, "flags": [1]}
     assert captured["kw"]["limit"] == 2
+    assert captured["kw"]["concurrency"] == 8
 
 
 def test_extract_endpoint_streams_error(out_root, monkeypatch):
