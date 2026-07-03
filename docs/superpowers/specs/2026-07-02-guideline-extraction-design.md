@@ -127,6 +127,19 @@ extraction, in `pagemap.resolve_page_numbers` (no per-query work):
 At query time the agent uses one key, `page_number`; `pdf_index` is internal (locates the image, QC
 fallback).
 
+### Resilience & resume
+Records are written per page as they complete. A page whose model call fails (truncation, refusal, …)
+is recorded in the returned `failed` list and left unwritten — it does **not** abort the batch; the
+manifest is written for the pages that succeeded. Re-running the same guideline **resumes**: pages that
+already have a record are reused (no model call), so only missing/failed pages are retried.
+`extract(...)` returns `(manifest, flags, failed)`. Auto-derived ids never overwrite a different
+guideline — if the target folder exists, the id gets a numeric suffix; an explicit id writes into the
+same folder (intentional re-extract/resume).
+
+**Known gap:** roman-numeral / unnumbered front-matter pages (detected number `None`) receive a
+calibrated arabic `page_number` without a QC flag — reliably distinguishing them from body pages whose
+number wasn't on its own line needs roman-numeral detection (not yet built).
+
 ## 5. Querying model (Phase 2 — design only, not built)
 
 Documented to confirm the extraction output supports it. Not implemented.

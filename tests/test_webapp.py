@@ -94,7 +94,7 @@ def test_extract_endpoint_streams_progress_then_done(out_root, monkeypatch):
         m = Manifest(guideline_id, kw["guideline_title"], kw.get("jurisdiction"),
                      None, kw.get("version"), None, "x.pdf", total,
                      [PageMapEntry(1, "t", 1), PageMapEntry(2, "u", 2)])
-        return m, [1]
+        return m, [1], []
 
     monkeypatch.setattr(webapp, "extract", fake_extract)
     resp = client().post(

@@ -14,7 +14,7 @@ def test_extract_writes_manifest_and_one_record_per_page(tmp_path):
         RenderedPage(1, b"\x89PNG1", "Cough\n1"),
         RenderedPage(2, b"\x89PNG2", "TB treatment\n2"),
     ]
-    manifest, flags = extract(
+    manifest, flags, _failed = extract(
         "ignored.pdf",
         str(tmp_path),
         guideline_id="APC_2023_ZA",
@@ -43,7 +43,7 @@ def test_extract_flags_broken_numbering(tmp_path):
         RenderedPage(1, b"a", "A\n5"),
         RenderedPage(2, b"b", "B\n3"),
     ]
-    _, flags = extract(
+    _, flags, _failed = extract(
         "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
@@ -60,7 +60,7 @@ def test_extract_flags_printed_number_mismatch_with_calibrated_offset(tmp_path):
         RenderedPage(2, b"b", "B\n2"),
         RenderedPage(3, b"c", "C\n10"),
     ]
-    _, flags = extract(
+    _, flags, _failed = extract(
         "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
@@ -74,7 +74,7 @@ def test_extract_names_records_by_pdf_index_even_with_nonzero_offset(tmp_path):
         RenderedPage(1, b"a", "A\n40"),
         RenderedPage(2, b"b", "B\n41"),
     ]
-    manifest, flags = extract(
+    manifest, flags, _failed = extract(
         "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
@@ -93,7 +93,7 @@ def test_extract_respects_limit(tmp_path):
         RenderedPage(2, b"b", "P2\n2"),
         RenderedPage(3, b"c", "P3\n3"),
     ]
-    manifest, _ = extract(
+    manifest, _flags, _failed = extract(
         "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
         limit=2,
@@ -115,7 +115,7 @@ def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
         return raw_text.splitlines()[0], "prose"
 
     rendered = [RenderedPage(i, f"img{i}".encode(), f"Page{i}\n{i}") for i in range(1, 6)]
-    manifest, _ = extract(
+    manifest, _flags, _failed = extract(
         "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=describe, rendered=rendered,
         concurrency=4,
@@ -152,7 +152,7 @@ def test_extract_auto_derives_id_and_title_from_detection(tmp_path):
         return {"title": "Adult Primary Care (APC) 2023", "jurisdiction": "South Africa",
                 "publisher": None, "version": "2023", "effective_date": None}
 
-    manifest, _ = extract(
+    manifest, _flags, _failed = extract(
         "APC_2023_Clinical_tool.pdf", str(tmp_path),
         client=object(),  # truthy so detection runs; fake_detect ignores it
         describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
@@ -171,7 +171,7 @@ def test_extract_explicit_values_override_detection(tmp_path):
         return {"title": "Detected Title", "jurisdiction": "Nowhere",
                 "publisher": None, "version": None, "effective_date": None}
 
-    manifest, _ = extract(
+    manifest, _flags, _failed = extract(
         "x.pdf", str(tmp_path), guideline_id="my-id", guideline_title="My Title",
         client=object(), describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
     )
@@ -198,7 +198,7 @@ def test_extract_detection_sees_front_matter_not_just_page_one(tmp_path):
         return {"title": "APC 2023", "jurisdiction": None,
                 "publisher": "Western Cape Government Health", "version": None, "effective_date": None}
 
-    manifest, _ = extract(
+    manifest, _flags, _failed = extract(
         "x.pdf", str(tmp_path), client=object(),
         describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
     )
@@ -208,3 +208,67 @@ def test_extract_detection_sees_front_matter_not_just_page_one(tmp_path):
     assert "Contents" in seen["raw_text"]          # page 3 included
     assert "Body" not in seen["raw_text"]          # page 4 (body) excluded
     assert manifest.publisher == "Western Cape Government Health"
+
+
+def test_extract_resumes_existing_pages(tmp_path):
+    # Pre-write page 1's record; extract should reuse it (not call describe for it)
+    # and only process page 2.
+    import json as _json, os as _os
+    d = tmp_path / "g" / "pages"
+    d.mkdir(parents=True)
+    (d / "p001.json").write_text(_json.dumps(
+        {"guideline_id": "g", "page_number": 1, "pdf_index": 1, "title": "Existing",
+         "prose": "kept", "image_path": "pages/p001.png", "raw_text": "r"}))
+    (tmp_path / "g" / "manifest.json").write_text("{}")  # prior partial run
+
+    calls = []
+
+    def describe(client, image_bytes, raw_text):
+        calls.append(raw_text)
+        return raw_text.splitlines()[0], "prose"
+
+    rendered = [RenderedPage(1, b"a", "P1\n1"), RenderedPage(2, b"b", "P2\n2")]
+    manifest, _flags, failed = extract(
+        "x.pdf", str(tmp_path), guideline_id="g",
+        guideline_title="t", describe_fn=describe, rendered=rendered,
+    )
+    assert calls == ["P2\n2"]                       # page 1 skipped, only page 2 described
+    assert failed == []
+    titles = {p.page_number: p.title for p in manifest.pages}
+    assert titles[1] == "Existing"                  # reused from disk
+    assert titles[2] == "P2"
+
+
+def test_extract_tolerates_a_failing_page(tmp_path):
+    def describe(client, image_bytes, raw_text):
+        if raw_text.startswith("P2"):
+            raise RuntimeError("boom on page 2")
+        return raw_text.splitlines()[0], "prose"
+
+    rendered = [RenderedPage(1, b"a", "P1\n1"), RenderedPage(2, b"b", "P2\n2")]
+    manifest, _flags, failed = extract(
+        "x.pdf", str(tmp_path), guideline_id="g",
+        guideline_title="t", describe_fn=describe, rendered=rendered,
+    )
+    assert failed == [2]                            # reported, not raised
+    assert [p.pdf_index for p in manifest.pages] == [1]   # only the good page
+    assert manifest.page_count == 1
+    assert (tmp_path / "g" / "manifest.json").exists()    # manifest still written
+    assert not (tmp_path / "g" / "pages" / "p002.json").exists()  # failed page left for retry
+
+
+def test_extract_auto_id_collision_gets_suffix(tmp_path):
+    (tmp_path / "adult-primary-care" / "pages").mkdir(parents=True)
+    (tmp_path / "adult-primary-care" / "manifest.json").write_text("{}")  # a different guideline
+
+    def fake_detect(client, image_bytes, raw_text):
+        return {"title": "Adult Primary Care", "jurisdiction": None,
+                "publisher": None, "version": None, "effective_date": None}
+
+    rendered = [RenderedPage(1, b"a", "cover")]
+    manifest, _flags, _failed = extract(
+        "x.pdf", str(tmp_path), client=object(),
+        describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
+    )
+    assert manifest.guideline_id == "adult-primary-care-2"   # did not overwrite
+    assert (tmp_path / "adult-primary-care-2" / "manifest.json").exists()

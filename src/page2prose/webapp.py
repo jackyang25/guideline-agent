@@ -100,7 +100,7 @@ def run_extract(
 
     def worker() -> None:
         try:
-            manifest, flags = extract(
+            manifest, flags, failed = extract(
                 pdf_path,
                 str(root),
                 guideline_id=guideline_id or None,
@@ -120,6 +120,7 @@ def run_extract(
                     "title": manifest.title,
                     "page_count": manifest.page_count,
                     "flags": flags,
+                    "failed": failed,
                 }
             )
         except Exception as exc:  # surface auth/model errors as a stream event
@@ -350,7 +351,8 @@ $('#upload').onsubmit = async e => {
         $('#status').textContent = 'processing ' + m.done + ' / ' + m.total;
       } else if (m.type === 'done') {
         $('#status').textContent = 'done: ' + m.guideline_id + ' — ' + m.page_count + ' pages'
-          + (m.flags.length ? (' · QC flags ' + JSON.stringify(m.flags)) : '');
+          + (m.flags.length ? (' · QC flags ' + JSON.stringify(m.flags)) : '')
+          + (m.failed && m.failed.length ? (' · ' + m.failed.length + ' failed (re-extract to retry)') : '');
         await loadGuidelines(m.guideline_id);
       } else if (m.type === 'error') {
         $('#status').textContent = 'error: ' + m.detail;

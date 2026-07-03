@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    manifest, flags = extract(
+    manifest, flags, failed = extract(
         args.pdf_path,
         args.out_root,
         guideline_id=args.guideline_id,
@@ -47,6 +47,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  id: {manifest.guideline_id}  |  title: {manifest.title}")
     if flags:
         print(f"WARNING: page-number QC flagged page positions (0-based): {flags}")
+    if failed:
+        print(f"WARNING: {len(failed)} page(s) failed and were skipped (sheet indices {failed}). "
+              f"Re-run to retry just those.")
     return 0
 
 
