@@ -155,6 +155,8 @@ INDEX_HTML = """<!doctype html>
   header { border-bottom:1px solid var(--line); padding:10px 14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
   header select, header input, header button { font:13px inherit; padding:4px 6px; border:1px solid var(--line); background:#fff; }
   header button { cursor:pointer; }
+  .fld { color:var(--muted); font-size:12px; display:inline-flex; gap:5px; align-items:center; }
+  #upload { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   #meta { color:var(--muted); font-size:12px; }
   main { display:grid; grid-template-columns:280px 1fr; height:calc(100vh - 47px); }
   #list { border-right:1px solid var(--line); overflow:auto; }
@@ -183,13 +185,13 @@ INDEX_HTML = """<!doctype html>
 <body>
 <header>
   <strong>Guideline Extractor</strong>
-  <select id="gsel"></select>
+  <label class="fld">View <select id="gsel"></select></label>
   <span id="meta"></span>
   <form id="upload">
-    <input type="file" id="file" accept="application/pdf" required>
-    <input type="text" id="gid" placeholder="guideline id" required size="14">
-    <input type="text" id="gtitle" placeholder="title" required size="16">
-    <input type="number" id="limit" placeholder="limit" size="4" title="pages (blank = all)">
+    <label class="fld">PDF <input type="file" id="file" accept="application/pdf" required></label>
+    <label class="fld">ID <input type="text" id="gid" required size="12"></label>
+    <label class="fld">Title <input type="text" id="gtitle" required size="16"></label>
+    <label class="fld">Limit <input type="number" id="limit" size="4" title="first N pages; blank = all"></label>
     <button type="submit">Extract</button>
     <span id="status"></span>
   </form>
@@ -213,7 +215,11 @@ async function loadGuidelines(select) {
     sel.appendChild(o);
   }
   if (gs.length) { sel.value = select || gs[0].guideline_id; await loadManifest(sel.value); }
-  else { $('#list').innerHTML = '<div class="empty">No extractions yet.</div>'; }
+  else {
+    const o = document.createElement('option'); o.textContent = '(none yet)'; o.disabled = true; sel.appendChild(o);
+    $('#list').innerHTML = '<div class="empty">No extractions yet. Upload a PDF above.</div>';
+    $('#meta').textContent = '';
+  }
 }
 
 async function loadManifest(gid) {
