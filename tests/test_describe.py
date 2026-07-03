@@ -85,3 +85,9 @@ def test_describe_page_raises_on_content_filter():
     client = _FakeClient(None, finish_reason="content_filter")
     with pytest.raises(RuntimeError):
         describe_page(client, b"\x89PNG", "raw")
+
+
+def test_fidelity_prompt_flags_continuation_and_cross_refs():
+    p = FIDELITY_PROMPT.lower()
+    assert "continues on the next page" in p or "cut off" in p
+    assert "see p.112" in p  # record cross-references as printed
