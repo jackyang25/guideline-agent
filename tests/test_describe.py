@@ -91,3 +91,26 @@ def test_fidelity_prompt_flags_continuation_and_cross_refs():
     p = FIDELITY_PROMPT.lower()
     assert "continues on the next page" in p or "cut off" in p
     assert "see p.112" in p  # record cross-references as printed
+
+
+def test_detect_metadata_parses_fields(monkeypatch):
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    import json as _json
+    from page2prose import describe
+    payload = _json.dumps({"title": "Adult Primary Care 2023", "jurisdiction": "South Africa",
+                           "publisher": "WCGH", "version": "2023", "effective_date": None})
+    client = _FakeClient(payload)
+    meta = describe.detect_metadata(client, b"\x89PNG", "raw")
+    assert meta["title"] == "Adult Primary Care 2023"
+    assert meta["jurisdiction"] == "South Africa"
+    assert meta["effective_date"] is None
+    kw = client.chat.completions.captured
+    assert kw["response_format"]["json_schema"]["name"] == "guideline_metadata"
+
+
+def test_detect_metadata_returns_nulls_on_truncation():
+    from page2prose import describe
+    client = _FakeClient(None, finish_reason="length")
+    meta = describe.detect_metadata(client, b"\x89PNG", "raw")
+    assert meta == {"title": None, "jurisdiction": None, "publisher": None,
+                    "version": None, "effective_date": None}

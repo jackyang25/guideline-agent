@@ -11,9 +11,11 @@ load_dotenv()  # read OPENAI_API_KEY from a .env file if present
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Extract prose-per-page from a guideline PDF.")
     parser.add_argument("pdf_path")
-    parser.add_argument("out_dir")
-    parser.add_argument("--guideline-id", required=True)
-    parser.add_argument("--guideline-title", required=True)
+    parser.add_argument("out_root", help="Output root; the guideline is written to <out_root>/<id>.")
+    parser.add_argument("--guideline-id", default=None,
+                        help="Folder/citation key. Default: a slug of the title.")
+    parser.add_argument("--guideline-title", default=None,
+                        help="Default: detected from the cover page, else the filename.")
     parser.add_argument("--jurisdiction", default=None)
     parser.add_argument("--publisher", default=None)
     parser.add_argument("--version", default=None)
@@ -31,8 +33,8 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest, flags = extract(
         args.pdf_path,
-        args.out_dir,
-        args.guideline_id,
+        args.out_root,
+        guideline_id=args.guideline_id,
         guideline_title=args.guideline_title,
         jurisdiction=args.jurisdiction,
         publisher=args.publisher,
@@ -41,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         concurrency=args.concurrency,
         limit=args.limit,
     )
-    print(f"Wrote {manifest.page_count} pages to {args.out_dir}")
+    print(f"Wrote {manifest.page_count} pages to {args.out_root}/{manifest.guideline_id}")
+    print(f"  id: {manifest.guideline_id}  |  title: {manifest.title}")
     if flags:
         print(f"WARNING: page-number QC flagged page positions (0-based): {flags}")
     return 0

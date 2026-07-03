@@ -106,7 +106,13 @@ def test_extract_endpoint_streams_progress_then_done(out_root, monkeypatch):
     events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
     progress = [e for e in events if e["type"] == "progress"]
     assert progress[-1] == {"type": "progress", "done": 2, "total": 2}
-    assert events[-1] == {"type": "done", "guideline_id": "G1", "page_count": 2, "flags": [1]}
+    done = events[-1]
+    assert done["type"] == "done"
+    assert done["guideline_id"] == "G1"
+    assert done["title"] == "Title"
+    assert done["page_count"] == 2
+    assert done["flags"] == [1]
+    assert captured["guideline_id"] == "G1"
     assert captured["kw"]["limit"] == 2
     assert captured["kw"]["concurrency"] == 8
 
