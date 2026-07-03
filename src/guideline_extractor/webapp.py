@@ -193,6 +193,7 @@ INDEX_HTML = r"""<!doctype html>
     <label class="fld">ID <input type="text" id="gid" required size="12"></label>
     <label class="fld">Title <input type="text" id="gtitle" required size="16"></label>
     <label class="fld">Limit <input type="number" id="limit" size="4" title="first N pages; blank = all"></label>
+    <label class="fld">Workers <input type="number" id="workers" value="25" size="4" title="pages described in parallel"></label>
     <button type="submit">Extract</button>
     <span id="status"></span>
   </form>
@@ -275,6 +276,7 @@ $('#upload').onsubmit = async e => {
   fd.append('guideline_id', $('#gid').value);
   fd.append('guideline_title', $('#gtitle').value);
   if ($('#limit').value) fd.append('limit', $('#limit').value);
+  if ($('#workers').value) fd.append('concurrency', $('#workers').value);
   $('#status').textContent = 'starting...';
   const res = await fetch('/api/extract', {method:'POST', body:fd});
   const reader = res.body.getReader();
