@@ -1,8 +1,33 @@
 import base64
 import json
 import os
+import re
 
 DEFAULT_MODEL = "gpt-5.5"
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_YEAR = re.compile(r"(?:19|20)\d{2}")
+
+
+def _clean_str(value) -> str | None:
+    """Strip whitespace; empty / 'null' / 'n/a' become None so fields are symmetric."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s or s.lower() in ("null", "none", "n/a", "na", "unknown"):
+        return None
+    return s
+
+
+def _normalize_date(value) -> str | None:
+    """Coerce a date to 'YYYY-MM-DD' or 'YYYY'; else pull out a 4-digit year; else None."""
+    s = _clean_str(value)
+    if s is None:
+        return None
+    if _ISO_DATE.match(s):
+        return s
+    year = _YEAR.search(s)
+    return year.group(0) if year else None
 
 FIDELITY_PROMPT = (
     "Produce ONE self-contained textual description that fully encodes this "
@@ -33,11 +58,17 @@ _SCHEMA = {
 
 METADATA_PROMPT = (
     "This is the cover / title page of a clinical guideline document. From what is "
-    "printed on it, extract: the document's title, its jurisdiction or country, its "
-    "publisher/issuing body, its version or year, and its effective date. Use ONLY "
-    "what is actually shown - set a field to null if it is not printed on the page. "
-    "Do not guess.\n\n"
-    "Return a JSON object with fields: \"title\", \"jurisdiction\", \"publisher\", "
+    "printed on it, extract these fields in a CONSISTENT, NORMALISED form. Use ONLY "
+    "what is actually shown; set a field to null if it is not printed. Do not guess.\n"
+    "- title: the document's title, as printed.\n"
+    "- jurisdiction: the country or region it applies to, as a plain country/region "
+    "name (e.g. 'South Africa'), not an abbreviation.\n"
+    "- publisher: the issuing organisation's name, as printed.\n"
+    "- version: the edition or version, as printed (e.g. '2023', '2nd edition').\n"
+    "- effective_date: the publication/effective date as ISO 8601 'YYYY-MM-DD'; if "
+    "only a year (or month and year) is shown, give just 'YYYY'; never write month "
+    "names or free text; null if no date is shown.\n\n"
+    "Return a JSON object with fields \"title\", \"jurisdiction\", \"publisher\", "
     "\"version\", \"effective_date\" (each a string or null)."
 )
 
@@ -96,7 +127,13 @@ def detect_metadata(
     if choice.finish_reason in ("length", "content_filter") or choice.message.content is None:
         return {k: None for k in _METADATA_SCHEMA["properties"]}
     data = json.loads(choice.message.content)
-    return {k: data.get(k) for k in _METADATA_SCHEMA["properties"]}
+    return {
+        "title": _clean_str(data.get("title")),
+        "jurisdiction": _clean_str(data.get("jurisdiction")),
+        "publisher": _clean_str(data.get("publisher")),
+        "version": _clean_str(data.get("version")),
+        "effective_date": _normalize_date(data.get("effective_date")),
+    }
 
 
 def build_messages(image_bytes: bytes, raw_text: str) -> list[dict]:

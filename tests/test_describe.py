@@ -114,3 +114,26 @@ def test_detect_metadata_returns_nulls_on_truncation():
     meta = describe.detect_metadata(client, b"\x89PNG", "raw")
     assert meta == {"title": None, "jurisdiction": None, "publisher": None,
                     "version": None, "effective_date": None}
+
+
+def test_detect_metadata_normalizes_fields():
+    import json as _json
+    from page2prose import describe
+    # messy model output: month-name date, padded strings, "n/a"
+    payload = _json.dumps({"title": "  APC 2023 ", "jurisdiction": "South Africa",
+                           "publisher": "n/a", "version": " 2nd edition ",
+                           "effective_date": "January 2023"})
+    meta = describe.detect_metadata(describe_client := _FakeClient(payload), b"x", "raw")
+    assert meta["title"] == "APC 2023"           # stripped
+    assert meta["publisher"] is None             # 'n/a' -> None
+    assert meta["version"] == "2nd edition"      # stripped
+    assert meta["effective_date"] == "2023"      # month name -> year only
+
+
+def test_normalize_date_variants():
+    from page2prose.describe import _normalize_date
+    assert _normalize_date("2023-01-01") == "2023-01-01"
+    assert _normalize_date("2023") == "2023"
+    assert _normalize_date("1 Jan 2024") == "2024"
+    assert _normalize_date("no date") is None
+    assert _normalize_date(None) is None
