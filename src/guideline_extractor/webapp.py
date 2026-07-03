@@ -183,20 +183,26 @@ INDEX_HTML = r"""<!doctype html>
 <style>
   :root { --line:#d9d9d9; --muted:#666; --bg:#fff; --panel:#fafafa; }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 -apple-system,Helvetica,Arial,sans-serif; color:#111; }
-  header { border-bottom:1px solid var(--line); padding:10px 14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-  header select, header input, header button { font:13px inherit; padding:4px 6px; border:1px solid var(--line); background:#fff; }
-  header button { cursor:pointer; }
+  body { margin:0; font:14px/1.5 -apple-system,Helvetica,Arial,sans-serif; color:#111; height:100vh; display:flex; flex-direction:column; }
+  header { flex:0 0 auto; border-bottom:1px solid var(--line); padding:8px 14px; display:flex; gap:8px; align-items:center; }
+  header strong { margin-right:8px; }
+  .toptab { font:13px inherit; padding:6px 16px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  .toptab.on { background:#111; color:#fff; border-color:#111; }
+  .view { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  #browsebar { flex:0 0 auto; border-bottom:1px solid var(--line); padding:10px 14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  #browsebar select, #browsebar input, #browsebar button { font:13px inherit; padding:4px 6px; border:1px solid var(--line); background:#fff; }
+  #browsebar button { cursor:pointer; }
   .fld { color:var(--muted); font-size:12px; display:inline-flex; gap:5px; align-items:center; }
-  #upload { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  #upload { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-left:auto; }
   #meta { color:var(--muted); font-size:12px; }
-  main { display:grid; grid-template-columns:280px 1fr; height:calc(100vh - 47px); }
-  #list { border-right:1px solid var(--line); overflow:auto; }
+  #status { color:var(--muted); font-size:12px; }
+  main { flex:1 1 auto; min-height:0; display:flex; }
+  #list { width:280px; flex:0 0 auto; border-right:1px solid var(--line); overflow:auto; }
   #list div { padding:7px 12px; border-bottom:1px solid #eee; cursor:pointer; }
   #list div:hover { background:var(--panel); }
   #list div.sel { background:#eef; }
   #list .pn { color:var(--muted); font-variant-numeric:tabular-nums; margin-right:8px; }
-  #block { overflow:auto; padding:0; }
+  #block { flex:1 1 auto; min-width:0; overflow:auto; padding:0; }
   #blockhead { padding:10px 16px; border-bottom:1px solid var(--line); }
   #blockhead .fields { color:var(--muted); font-size:12px; font-family:ui-monospace,Menlo,monospace; }
   .tabs { display:flex; gap:0; border-bottom:1px solid var(--line); }
@@ -210,35 +216,45 @@ INDEX_HTML = r"""<!doctype html>
   pre.raw { white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; background:var(--panel); border:1px solid var(--line); padding:12px; }
   img.page { max-width:100%; border:1px solid var(--line); }
   .empty { color:var(--muted); padding:24px; }
-  #upload { margin-left:auto; }
-  #status { color:var(--muted); font-size:12px; }
+  #askbar { flex:0 0 auto; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
+  #ask { flex:1; padding:6px 10px; border:1px solid var(--line); font:14px inherit; }
+  #answer { flex:1 1 auto; min-height:0; overflow:auto; padding:16px; }
 </style>
 </head>
 <body>
 <header>
   <strong>Guideline Extractor</strong>
-  <label class="fld">View <select id="gsel"></select></label>
-  <span id="meta"></span>
-  <form id="upload">
-    <label class="fld">PDF <input type="file" id="file" accept="application/pdf" required></label>
-    <label class="fld">ID <input type="text" id="gid" required size="12"></label>
-    <label class="fld">Title <input type="text" id="gtitle" required size="16"></label>
-    <label class="fld">Limit <input type="number" id="limit" size="4" title="first N pages; blank = all"></label>
-    <label class="fld">Workers <input type="number" id="workers" value="25" size="4" title="pages described in parallel"></label>
-    <button type="submit">Extract</button>
-    <span id="status"></span>
-  </form>
+  <button id="tab-ask" class="toptab on">Ask</button>
+  <button id="tab-browse" class="toptab">Browse</button>
 </header>
-<main>
-  <div id="list"></div>
-  <div id="block">
-    <div id="askbar" style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;">
-      <input type="text" id="ask" placeholder="Ask a question over the guidelines" style="flex:1;padding:5px 8px;border:1px solid var(--line);font:13px inherit;">
-      <button id="askbtn" style="padding:5px 12px;cursor:pointer;">Ask</button>
-    </div>
-    <div id="answer" class="pane on" style="padding:16px;"><div class="empty">Ask a question, or select a page.</div></div>
+
+<div id="view-ask" class="view">
+  <div id="askbar">
+    <input type="text" id="ask" placeholder="Ask a question over the guidelines">
+    <button id="askbtn" class="toptab">Ask</button>
   </div>
-</main>
+  <div id="answer"><div class="empty">Ask a question over the extracted guidelines.</div></div>
+</div>
+
+<div id="view-browse" class="view" style="display:none;">
+  <div id="browsebar">
+    <label class="fld">View <select id="gsel"></select></label>
+    <span id="meta"></span>
+    <form id="upload">
+      <label class="fld">PDF <input type="file" id="file" accept="application/pdf" required></label>
+      <label class="fld">ID <input type="text" id="gid" required size="12"></label>
+      <label class="fld">Title <input type="text" id="gtitle" required size="16"></label>
+      <label class="fld">Limit <input type="number" id="limit" size="4" title="first N pages; blank = all"></label>
+      <label class="fld">Workers <input type="number" id="workers" value="25" size="4" title="pages described in parallel"></label>
+      <button type="submit">Extract</button>
+      <span id="status"></span>
+    </form>
+  </div>
+  <main>
+    <div id="list"></div>
+    <div id="block"><div class="empty">Select a page.</div></div>
+  </main>
+</div>
 <script>
 const $ = s => document.querySelector(s);
 let current = null;
@@ -392,6 +408,16 @@ async function runAsk() {
 }
 $('#askbtn').onclick = runAsk;
 $('#ask').onkeydown = e => { if (e.key === 'Enter') runAsk(); };
+
+function showTab(name) {
+  $('#view-ask').style.display = name === 'ask' ? '' : 'none';
+  $('#view-browse').style.display = name === 'browse' ? '' : 'none';
+  $('#tab-ask').classList.toggle('on', name === 'ask');
+  $('#tab-browse').classList.toggle('on', name === 'browse');
+}
+$('#tab-ask').onclick = () => showTab('ask');
+$('#tab-browse').onclick = () => showTab('browse');
+showTab('ask');
 
 loadGuidelines();
 </script>
