@@ -25,10 +25,12 @@ OPENAI_MODEL=gpt-5.5
 .venv/bin/python -m page2prose.webapp
 ```
 
-Open http://127.0.0.1:8000. Upload a PDF, set **ID** / **Title**, optionally **Limit** (first N pages,
-for a cheap smoke test) and **Workers** (parallel pages, default 25), then **Extract**. Progress shows
-live. Pick a guideline in **View** and click a page to inspect its data block — Prose (rendered), Raw
-text, **JSON** (the exact stored record), and the Page image.
+Open http://127.0.0.1:8000. On the **Ask** tab, ask a question and watch the agent navigate to a cited
+answer. On the **Browse** tab, upload a PDF and hit **Extract** — leave **ID**/**Title** blank to have
+them detected from the cover page (or set them to override); optionally set **Limit** (first N pages,
+for a cheap smoke test) and **Workers** (parallel pages, default 25). Progress shows live. Then pick a
+guideline in **View** and click a page to inspect its data block — Prose (rendered), Raw text, **JSON**
+(the exact stored record), and the Page image.
 
 Stop with `Ctrl+C`. If a start fails with "address already in use", a previous server is still running:
 `lsof -ti:8000 | xargs kill`.
@@ -36,9 +38,10 @@ Stop with `Ctrl+C`. If a start fails with "address already in use", a previous s
 ## Run the CLI
 
 ```bash
-.venv/bin/python -m page2prose.cli PDF OUT_DIR \
-  --guideline-id APC_2023_ZA --guideline-title "Adult Primary Care (APC) 2023" \
-  --jurisdiction "South Africa" --version 2023 --limit 3 --concurrency 25
+.venv/bin/python -m page2prose.cli PDF OUT_ROOT --limit 3 --concurrency 25
+# id/title/jurisdiction/version are detected from the cover page by default;
+# pass --guideline-id / --guideline-title / --jurisdiction / --version to override.
+# Output is written to OUT_ROOT/<id>.
 ```
 
 ## Output

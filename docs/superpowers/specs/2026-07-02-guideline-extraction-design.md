@@ -156,10 +156,11 @@ Viewer tabs per page: Prose (rendered), Raw text, JSON (the exact stored record)
 
 **CLI:**
 ```
-.venv/bin/python -m page2prose.cli PDF OUT_DIR \
-  --guideline-id APC_2023_ZA --guideline-title "Adult Primary Care (APC) 2023" \
-  --jurisdiction "South Africa" --version 2023 --limit 3 --concurrency 25
+.venv/bin/python -m page2prose.cli PDF OUT_ROOT --limit 3 --concurrency 25
 ```
+Guideline **id, title, jurisdiction, and version are auto-detected from the cover page** (a `detect_metadata`
+vision call on page 1); `id` defaults to a slug of the title. Pass `--guideline-id` / `--guideline-title` /
+`--jurisdiction` / `--version` to override any of them. Output is written to `OUT_ROOT/<id>`.
 
 ## 7. Configuration (`.env`)
 ```

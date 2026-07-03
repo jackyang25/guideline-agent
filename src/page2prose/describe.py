@@ -31,6 +31,74 @@ _SCHEMA = {
 }
 
 
+METADATA_PROMPT = (
+    "This is the cover / title page of a clinical guideline document. From what is "
+    "printed on it, extract: the document's title, its jurisdiction or country, its "
+    "publisher/issuing body, its version or year, and its effective date. Use ONLY "
+    "what is actually shown - set a field to null if it is not printed on the page. "
+    "Do not guess.\n\n"
+    "Return a JSON object with fields: \"title\", \"jurisdiction\", \"publisher\", "
+    "\"version\", \"effective_date\" (each a string or null)."
+)
+
+_METADATA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": ["string", "null"]},
+        "jurisdiction": {"type": ["string", "null"]},
+        "publisher": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]},
+        "effective_date": {"type": ["string", "null"]},
+    },
+    "required": ["title", "jurisdiction", "publisher", "version", "effective_date"],
+    "additionalProperties": False,
+}
+
+
+def build_metadata_messages(image_bytes: bytes, raw_text: str) -> list[dict]:
+    b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+    text = (
+        METADATA_PROMPT
+        + "\n\nExact text extracted from this page (ground truth):\n"
+        + raw_text
+    )
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+            ],
+        }
+    ]
+
+
+def detect_metadata(
+    client,
+    image_bytes: bytes,
+    raw_text: str,
+    model: str | None = None,
+    max_completion_tokens: int = 4000,
+) -> dict:
+    """Read the cover page and return {title, jurisdiction, publisher, version,
+    effective_date} (each str or None). Never raises for a normal response."""
+    model = model or os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    response = client.chat.completions.create(
+        model=model,
+        max_completion_tokens=max_completion_tokens,
+        messages=build_metadata_messages(image_bytes, raw_text),
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "guideline_metadata", "schema": _METADATA_SCHEMA, "strict": True},
+        },
+    )
+    choice = response.choices[0]
+    if choice.finish_reason in ("length", "content_filter") or choice.message.content is None:
+        return {k: None for k in _METADATA_SCHEMA["properties"]}
+    data = json.loads(choice.message.content)
+    return {k: data.get(k) for k in _METADATA_SCHEMA["properties"]}
+
+
 def build_messages(image_bytes: bytes, raw_text: str) -> list[dict]:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     text = (

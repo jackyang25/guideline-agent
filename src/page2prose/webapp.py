@@ -83,8 +83,8 @@ def get_image(guideline_id: str, pdf_index: int) -> FileResponse:
 @app.post("/api/extract")
 def run_extract(
     file: UploadFile,
-    guideline_id: str = Form(...),
-    guideline_title: str = Form(...),
+    guideline_id: str = Form(""),
+    guideline_title: str = Form(""),
     jurisdiction: str = Form(""),
     version: str = Form(""),
     limit: int = Form(0),
@@ -102,9 +102,9 @@ def run_extract(
         try:
             manifest, flags = extract(
                 pdf_path,
-                str(root / guideline_id),
-                guideline_id,
-                guideline_title=guideline_title,
+                str(root),
+                guideline_id=guideline_id or None,
+                guideline_title=guideline_title or None,
                 jurisdiction=jurisdiction or None,
                 version=version or None,
                 limit=limit or None,
@@ -116,7 +116,8 @@ def run_extract(
             events.put(
                 {
                     "type": "done",
-                    "guideline_id": guideline_id,
+                    "guideline_id": manifest.guideline_id,
+                    "title": manifest.title,
                     "page_count": manifest.page_count,
                     "flags": flags,
                 }
@@ -242,8 +243,8 @@ INDEX_HTML = r"""<!doctype html>
     <span id="meta"></span>
     <form id="upload">
       <label class="fld">PDF <input type="file" id="file" accept="application/pdf" required></label>
-      <label class="fld">ID <input type="text" id="gid" required size="12"></label>
-      <label class="fld">Title <input type="text" id="gtitle" required size="16"></label>
+      <label class="fld">ID <input type="text" id="gid" placeholder="(auto)" size="12"></label>
+      <label class="fld">Title <input type="text" id="gtitle" placeholder="(auto)" size="16"></label>
       <label class="fld">Limit <input type="number" id="limit" size="4" title="first N pages; blank = all"></label>
       <label class="fld">Workers <input type="number" id="workers" value="25" size="4" title="pages described in parallel"></label>
       <button type="submit">Extract</button>
@@ -348,7 +349,7 @@ $('#upload').onsubmit = async e => {
       if (m.type === 'progress') {
         $('#status').textContent = 'processing ' + m.done + ' / ' + m.total;
       } else if (m.type === 'done') {
-        $('#status').textContent = 'done: ' + m.page_count + ' pages'
+        $('#status').textContent = 'done: ' + m.guideline_id + ' — ' + m.page_count + ' pages'
           + (m.flags.length ? (' · QC flags ' + JSON.stringify(m.flags)) : '');
         await loadGuidelines(m.guideline_id);
       } else if (m.type === 'error') {

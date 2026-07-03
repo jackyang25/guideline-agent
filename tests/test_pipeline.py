@@ -17,7 +17,7 @@ def test_extract_writes_manifest_and_one_record_per_page(tmp_path):
     manifest, flags = extract(
         "ignored.pdf",
         str(tmp_path),
-        "APC_2023_ZA",
+        guideline_id="APC_2023_ZA",
         guideline_title="Adult Primary Care 2023",
         jurisdiction="South Africa",
         describe_fn=_fake_describe,
@@ -29,12 +29,12 @@ def test_extract_writes_manifest_and_one_record_per_page(tmp_path):
     assert [p.page_number for p in manifest.pages] == [1, 2]
     assert manifest.pages[1].title == "TB treatment"
 
-    rec = json.loads((tmp_path / "pages" / "p002.json").read_text())
+    rec = json.loads((tmp_path / "APC_2023_ZA" / "pages" / "p002.json").read_text())
     assert rec["page_number"] == 2
     assert rec["title"] == "TB treatment"
     assert rec["image_path"] == "pages/p002.png"
-    assert (tmp_path / "pages" / "p002.png").read_bytes() == b"\x89PNG2"
-    assert (tmp_path / "manifest.json").exists()
+    assert (tmp_path / "APC_2023_ZA" / "pages" / "p002.png").read_bytes() == b"\x89PNG2"
+    assert (tmp_path / "APC_2023_ZA" / "manifest.json").exists()
 
 
 def test_extract_flags_broken_numbering(tmp_path):
@@ -44,7 +44,7 @@ def test_extract_flags_broken_numbering(tmp_path):
         RenderedPage(2, b"b", "B\n3"),
     ]
     _, flags = extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
     assert flags == [1]
@@ -61,7 +61,7 @@ def test_extract_flags_printed_number_mismatch_with_calibrated_offset(tmp_path):
         RenderedPage(3, b"c", "C\n10"),
     ]
     _, flags = extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
     assert flags == [2]
@@ -75,15 +75,15 @@ def test_extract_names_records_by_pdf_index_even_with_nonzero_offset(tmp_path):
         RenderedPage(2, b"b", "B\n41"),
     ]
     manifest, flags = extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
     )
     assert flags == []
     assert [p.page_number for p in manifest.pages] == [40, 41]
 
-    rec1 = json.loads((tmp_path / "pages" / "p001.json").read_text())
+    rec1 = json.loads((tmp_path / "g" / "pages" / "p001.json").read_text())
     assert rec1["page_number"] == 40
-    rec2 = json.loads((tmp_path / "pages" / "p002.json").read_text())
+    rec2 = json.loads((tmp_path / "g" / "pages" / "p002.json").read_text())
     assert rec2["page_number"] == 41
 
 
@@ -94,13 +94,13 @@ def test_extract_respects_limit(tmp_path):
         RenderedPage(3, b"c", "P3\n3"),
     ]
     manifest, _ = extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
         limit=2,
     )
     assert manifest.page_count == 2
     assert [p.pdf_index for p in manifest.pages] == [1, 2]
-    assert not (tmp_path / "pages" / "p003.json").exists()
+    assert not (tmp_path / "g" / "pages" / "p003.json").exists()
 
 
 def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
@@ -116,7 +116,7 @@ def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
 
     rendered = [RenderedPage(i, f"img{i}".encode(), f"Page{i}\n{i}") for i in range(1, 6)]
     manifest, _ = extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=describe, rendered=rendered,
         concurrency=4,
     )
@@ -126,14 +126,14 @@ def test_extract_concurrent_writes_all_pages_in_order(tmp_path):
     assert [p.pdf_index for p in manifest.pages] == [1, 2, 3, 4, 5]
     assert [p.title for p in manifest.pages] == [f"Page{i}" for i in range(1, 6)]
     for i in range(1, 6):
-        assert (tmp_path / "pages" / f"p00{i}.json").exists()
+        assert (tmp_path / "g" / "pages" / f"p00{i}.json").exists()
 
 
 def test_extract_reports_progress_via_on_page(tmp_path):
     rendered = [RenderedPage(i, f"i{i}".encode(), f"P{i}\n{i}") for i in range(1, 4)]
     calls = []
     extract(
-        "ignored.pdf", str(tmp_path), "g",
+        "ignored.pdf", str(tmp_path), guideline_id="g",
         guideline_title="t", describe_fn=_fake_describe, rendered=rendered,
         on_page=lambda done, total: calls.append((done, total)),
     )
@@ -141,3 +141,41 @@ def test_extract_reports_progress_via_on_page(tmp_path):
     assert calls[0] == (0, 3)
     assert calls[-1] == (3, 3)
     assert sorted(d for d, _ in calls) == [0, 1, 2, 3]
+
+
+def test_extract_auto_derives_id_and_title_from_detection(tmp_path):
+    # No guideline_id/title given: a fake client triggers detection, and id is a
+    # slug of the detected title. Output folder is named by the derived id.
+    rendered = [RenderedPage(1, b"a", "cover"), RenderedPage(2, b"b", "Body\n2")]
+
+    def fake_detect(client, image_bytes, raw_text):
+        return {"title": "Adult Primary Care (APC) 2023", "jurisdiction": "South Africa",
+                "publisher": None, "version": "2023", "effective_date": None}
+
+    manifest, _ = extract(
+        "APC_2023_Clinical_tool.pdf", str(tmp_path),
+        client=object(),  # truthy so detection runs; fake_detect ignores it
+        describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
+    )
+    assert manifest.guideline_id == "adult-primary-care-apc-2023"
+    assert manifest.title == "Adult Primary Care (APC) 2023"
+    assert manifest.jurisdiction == "South Africa"
+    assert manifest.version == "2023"
+    assert (tmp_path / "adult-primary-care-apc-2023" / "manifest.json").exists()
+
+
+def test_extract_explicit_values_override_detection(tmp_path):
+    rendered = [RenderedPage(1, b"a", "cover")]
+
+    def fake_detect(client, image_bytes, raw_text):
+        return {"title": "Detected Title", "jurisdiction": "Nowhere",
+                "publisher": None, "version": None, "effective_date": None}
+
+    manifest, _ = extract(
+        "x.pdf", str(tmp_path), guideline_id="my-id", guideline_title="My Title",
+        client=object(), describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
+    )
+    assert manifest.guideline_id == "my-id"
+    assert manifest.title == "My Title"
+    # jurisdiction was not supplied, so detection still fills it
+    assert manifest.jurisdiction == "Nowhere"

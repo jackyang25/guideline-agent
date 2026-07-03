@@ -4,11 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-from .describe import describe_page
+from .describe import describe_page, detect_metadata
 from .models import Manifest, PageMapEntry, PageRecord
 from .pagemap import resolve_page_numbers
 from .render import render_pdf
 from .storage import save_image, write_manifest, write_page_record
+from .util import slugify
 
 
 def _process_page(out_dir, guideline_id, page, page_number, describe_fn, client) -> PageMapEntry:
@@ -32,16 +33,17 @@ def _process_page(out_dir, guideline_id, page, page_number, describe_fn, client)
 
 def extract(
     pdf_path: str,
-    out_dir: str,
-    guideline_id: str,
+    out_root: str,
     *,
-    guideline_title: str,
+    guideline_id: str | None = None,
+    guideline_title: str | None = None,
     jurisdiction: str | None = None,
     publisher: str | None = None,
     version: str | None = None,
     effective_date: str | None = None,
     client=None,
     describe_fn=describe_page,
+    detect_fn=detect_metadata,
     rendered=None,
     concurrency: int = 25,
     limit: int | None = None,
@@ -57,6 +59,24 @@ def extract(
 
     if client is None and describe_fn is describe_page:
         client = OpenAI()
+
+    # Auto-fill guideline metadata from the cover page when not supplied.
+    # Explicit arguments always win; detection only fills what is missing.
+    need_detect = pages and any(
+        v is None for v in (guideline_title, jurisdiction, publisher, version, effective_date)
+    )
+    if need_detect and detect_fn is not None and client is not None:
+        detected = detect_fn(client, pages[0].image_bytes, pages[0].raw_text)
+        guideline_title = guideline_title or detected.get("title")
+        jurisdiction = jurisdiction or detected.get("jurisdiction")
+        publisher = publisher or detected.get("publisher")
+        version = version or detected.get("version")
+        effective_date = effective_date or detected.get("effective_date")
+
+    stem = os.path.splitext(os.path.basename(pdf_path))[0]
+    guideline_title = guideline_title or stem
+    guideline_id = guideline_id or slugify(guideline_title) or slugify(stem) or "guideline"
+    out_dir = os.path.join(out_root, guideline_id)
 
     total = len(pages)
     if on_page is not None:
