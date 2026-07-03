@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
+from .agent.loop import answer
 from .pipeline import extract
 
 load_dotenv()  # read OPENAI_API_KEY (and GE_OUTPUT_ROOT) from a .env file if present
@@ -138,6 +139,36 @@ def run_extract(
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
+@app.post("/api/ask")
+def run_ask(body: dict) -> StreamingResponse:
+    query = (body or {}).get("query", "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="empty query")
+
+    events: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        try:
+            result = answer(query, on_event=events.put)
+            events.put({"type": "done", "answer": result.answer,
+                        "citations": result.citations, "complete": result.complete})
+        except Exception as exc:  # surface auth/model errors as a stream event
+            events.put({"type": "error", "detail": f"{type(exc).__name__}: {exc}"})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def stream():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     # no-store so the browser never runs a stale copy of the page's JS
@@ -200,7 +231,13 @@ INDEX_HTML = r"""<!doctype html>
 </header>
 <main>
   <div id="list"></div>
-  <div id="block"><div class="empty">Select a page.</div></div>
+  <div id="block">
+    <div id="askbar" style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;">
+      <input type="text" id="ask" placeholder="Ask a question over the guidelines" style="flex:1;padding:5px 8px;border:1px solid var(--line);font:13px inherit;">
+      <button id="askbtn" style="padding:5px 12px;cursor:pointer;">Ask</button>
+    </div>
+    <div id="answer" class="pane on" style="padding:16px;"><div class="empty">Ask a question, or select a page.</div></div>
+  </div>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -304,6 +341,57 @@ $('#upload').onsubmit = async e => {
     }
   }
 };
+
+async function runAsk() {
+  const q = $('#ask').value.trim();
+  if (!q) return;
+  const trace = [];
+  const render = (answerHtml) => {
+    const traceHtml = trace.length
+      ? '<div style="color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace;margin-bottom:12px;">'
+        + trace.map(escapeHtml).join('<br>') + '</div>'
+      : '';
+    $('#answer').innerHTML = traceHtml + (answerHtml || '');
+  };
+  trace.push('thinking...');
+  render('');
+  const res = await fetch('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream:true});
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const m = JSON.parse(line);
+      if (m.type === 'tool_call') {
+        if (trace[trace.length-1] === 'thinking...') trace.pop();
+        trace.push('→ ' + m.name + '(' + JSON.stringify(m.args) + ')');
+        render('');
+      } else if (m.type === 'tool_result') {
+        trace.push('   ' + m.name + ': ' + m.summary);
+        render('');
+      } else if (m.type === 'done') {
+        let html = '<div class="prose">' + escapeHtml(m.answer || '(no answer)') + '</div>';
+        if (m.citations && m.citations.length) {
+          html += '<p style="color:var(--muted);font-size:12px;">Sources: '
+            + m.citations.map(c => escapeHtml(c.guideline_id)+' p.'+c.page_number+(c.title?(' — '+escapeHtml(c.title)):'')).join('; ')
+            + '</p>';
+        }
+        render(html);
+      } else if (m.type === 'error') {
+        render('<div class="empty">error: ' + escapeHtml(m.detail) + '</div>');
+      }
+    }
+  }
+}
+$('#askbtn').onclick = runAsk;
+$('#ask').onkeydown = e => { if (e.key === 'Enter') runAsk(); };
 
 loadGuidelines();
 </script>
