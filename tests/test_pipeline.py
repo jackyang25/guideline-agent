@@ -179,3 +179,32 @@ def test_extract_explicit_values_override_detection(tmp_path):
     assert manifest.title == "My Title"
     # jurisdiction was not supplied, so detection still fills it
     assert manifest.jurisdiction == "Nowhere"
+
+
+def test_extract_detection_sees_front_matter_not_just_page_one(tmp_path):
+    # Metadata detection should receive text from the first few pages (cover +
+    # imprint), so a publisher printed on page 2 is available to it.
+    rendered = [
+        RenderedPage(1, b"cover", "APC 2023"),
+        RenderedPage(2, b"imprint", "Published by Western Cape Government Health"),
+        RenderedPage(3, b"toc", "Contents"),
+        RenderedPage(4, b"body", "Body\n4"),
+    ]
+    seen = {}
+
+    def fake_detect(client, image_bytes, raw_text):
+        seen["image"] = image_bytes
+        seen["raw_text"] = raw_text
+        return {"title": "APC 2023", "jurisdiction": None,
+                "publisher": "Western Cape Government Health", "version": None, "effective_date": None}
+
+    manifest, _ = extract(
+        "x.pdf", str(tmp_path), client=object(),
+        describe_fn=_fake_describe, detect_fn=fake_detect, rendered=rendered,
+    )
+    # cover image is page 1; text spans the front matter (page 2's publisher line present)
+    assert seen["image"] == b"cover"
+    assert "Western Cape Government Health" in seen["raw_text"]
+    assert "Contents" in seen["raw_text"]          # page 3 included
+    assert "Body" not in seen["raw_text"]          # page 4 (body) excluded
+    assert manifest.publisher == "Western Cape Government Health"
