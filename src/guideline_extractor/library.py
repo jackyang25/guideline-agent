@@ -22,7 +22,7 @@ def list_guidelines() -> list[dict]:
     if not r.exists():
         return []
     out = []
-    for child in sorted(r.iterdir()):
+    for child in r.iterdir():
         m = child / "manifest.json"
         if m.is_file():
             d = json.loads(m.read_text())
@@ -32,7 +32,7 @@ def list_guidelines() -> list[dict]:
                 "jurisdiction": d.get("jurisdiction"),
                 "page_count": d["page_count"],
             })
-    return out
+    return sorted(out, key=lambda g: g["guideline_id"])
 
 
 def load_manifest(guideline_id: str) -> dict:
