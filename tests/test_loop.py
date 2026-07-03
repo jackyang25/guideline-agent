@@ -157,3 +157,4 @@ def test_system_prompt_states_grounding_and_gathering_protocol():
     assert "do not flatten" in p
     assert "where it leads" in p
     assert "do not ask the user questions yourself" in p
+    assert "verbatim" in p  # quote dosages/values exactly
