@@ -41,3 +41,12 @@ def test_index_has_ask_box(monkeypatch, tmp_path):
     monkeypatch.setenv("GE_OUTPUT_ROOT", str(tmp_path))
     html = TestClient(webapp.app).get("/").text
     assert 'id="ask"' in html
+
+
+def test_index_has_ask_and_browse_tabs(monkeypatch, tmp_path):
+    monkeypatch.setenv("GE_OUTPUT_ROOT", str(tmp_path))
+    html = TestClient(webapp.app).get("/").text
+    assert 'id="tab-ask"' in html
+    assert 'id="tab-browse"' in html
+    assert 'id="view-ask"' in html
+    assert 'id="view-browse"' in html
