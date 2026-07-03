@@ -1,6 +1,6 @@
 import json
 import pytest
-from guideline_extractor import library
+from page2prose import library
 
 
 @pytest.fixture

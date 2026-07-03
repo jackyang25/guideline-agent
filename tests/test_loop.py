@@ -1,7 +1,7 @@
 import json
 import pytest
-from guideline_extractor.agent import loop
-from guideline_extractor.agent import tools
+from page2prose.agent import loop
+from page2prose.agent import tools
 
 
 @pytest.fixture

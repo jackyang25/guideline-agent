@@ -97,7 +97,7 @@ One prompt, provider-agnostic in spirit:
 
 ## 6. Entrypoints
 
-- **CLI:** `python -m guideline_extractor.ask "QUERY"` → prints each navigation step live (from
+- **CLI:** `python -m page2prose.ask "QUERY"` → prints each navigation step live (from
   `on_event`), then the answer and a Sources list (`guideline_id p.N — title`). The testable core.
 - **UI:** a query box + `POST /api/ask` in the existing web app that **streams NDJSON** (same pattern
   as extraction progress): `tool_call` / `tool_result` events as the agent navigates, then a terminal

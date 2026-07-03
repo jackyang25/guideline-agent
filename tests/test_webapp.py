@@ -3,8 +3,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from guideline_extractor import webapp
-from guideline_extractor.models import Manifest, PageMapEntry
+from page2prose import webapp
+from page2prose.models import Manifest, PageMapEntry
 
 
 @pytest.fixture

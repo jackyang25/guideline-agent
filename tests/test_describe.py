@@ -2,7 +2,7 @@ import base64
 import json
 
 import pytest
-from guideline_extractor.describe import (
+from page2prose.describe import (
     build_messages,
     parse_description,
     describe_page,

@@ -1,4 +1,4 @@
-from guideline_extractor.pagemap import (
+from page2prose.pagemap import (
     detect_printed_number,
     calibrate_offset,
     assign_page_numbers,

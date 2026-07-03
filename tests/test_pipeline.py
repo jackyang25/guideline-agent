@@ -1,7 +1,7 @@
 import json
 
-from guideline_extractor.render import RenderedPage
-from guideline_extractor.pipeline import extract
+from page2prose.render import RenderedPage
+from page2prose.pipeline import extract
 
 
 def _fake_describe(client, image_bytes, raw_text):
